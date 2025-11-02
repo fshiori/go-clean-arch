@@ -11,11 +11,11 @@ import (
 
 // UserHandler handles HTTP requests related to users
 type UserHandler struct {
-	userInteractor *usecase.UserInteractor
+	userInteractor usecase.UserUsecase
 }
 
 // NewUserHandler creates a new UserHandler
-func NewUserHandler(userInteractor *usecase.UserInteractor) *UserHandler {
+func NewUserHandler(userInteractor usecase.UserUsecase) *UserHandler {
 	return &UserHandler{
 		userInteractor: userInteractor,
 	}
