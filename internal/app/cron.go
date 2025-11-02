@@ -1,49 +1,34 @@
 package app
 
 import (
-	"go-clean-arch/internal/adapter/gateway"
-	"go-clean-arch/internal/adapter/repository"
-	"go-clean-arch/internal/delivery/job"
-	"go-clean-arch/internal/usecase"
-	"log"
+	"go-clean-arch/pkg/config"
+	"go-clean-arch/pkg/logger"
 
 	"gorm.io/gorm"
 )
 
 // CronScheduler represents the cron job scheduler application
 type CronScheduler struct {
-	db *gorm.DB
+	db  *gorm.DB
+	cfg *config.Config
 }
 
 // NewCronScheduler creates a new CronScheduler instance
-func NewCronScheduler(db *gorm.DB) *CronScheduler {
+func NewCronScheduler(db *gorm.DB, cfg *config.Config) *CronScheduler {
 	return &CronScheduler{
-		db: db,
+		db:  db,
+		cfg: cfg,
 	}
 }
 
 // Start starts the cron scheduler
 func (c *CronScheduler) Start() error {
-	log.Println("Starting cron scheduler...")
+	logger.Info("Starting cron scheduler...")
 
-	// Initialize repositories
-	userRepo := repository.NewUserRepository(c.db)
-	orderRepo := repository.NewOrderRepository(c.db)
-
-	// Initialize gateways
-	paymentGateway := gateway.NewStripeGateway("your-stripe-api-key")
-
-	// Initialize use cases
-	userInteractor := usecase.NewUserInteractor(userRepo)
-	orderInteractor := usecase.NewOrderInteractor(orderRepo, userRepo, paymentGateway)
-
-	// Initialize jobs
-	dailyReportJob := job.NewDailyReportJob(userInteractor, orderInteractor)
-
-	// Create scheduler
-	scheduler := job.NewScheduler(dailyReportJob)
+	// Wire automatically injects all dependencies
+	scheduler := InitializeCronScheduler(c.db, c.cfg)
 
 	// Start scheduler
-	log.Println("Cron scheduler is ready")
+	logger.Info("Cron scheduler is ready")
 	return scheduler.Start()
 }

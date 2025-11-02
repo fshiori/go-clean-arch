@@ -1,45 +1,34 @@
 package app
 
 import (
-	"go-clean-arch/internal/adapter/gateway"
-	"go-clean-arch/internal/adapter/repository"
-	"go-clean-arch/internal/delivery/consumer"
-	"go-clean-arch/internal/usecase"
-	"log"
+	"go-clean-arch/pkg/config"
+	"go-clean-arch/pkg/logger"
 
 	"gorm.io/gorm"
 )
 
 // Worker represents the background worker application
 type Worker struct {
-	db *gorm.DB
+	db  *gorm.DB
+	cfg *config.Config
 }
 
 // NewWorker creates a new Worker instance
-func NewWorker(db *gorm.DB) *Worker {
+func NewWorker(db *gorm.DB, cfg *config.Config) *Worker {
 	return &Worker{
-		db: db,
+		db:  db,
+		cfg: cfg,
 	}
 }
 
 // Start starts the worker
 func (w *Worker) Start() error {
-	log.Println("Starting worker...")
+	logger.Info("Starting worker...")
 
-	// Initialize repositories
-	userRepo := repository.NewUserRepository(w.db)
-	orderRepo := repository.NewOrderRepository(w.db)
-
-	// Initialize gateways
-	paymentGateway := gateway.NewStripeGateway("your-stripe-api-key")
-
-	// Initialize use cases
-	orderInteractor := usecase.NewOrderInteractor(orderRepo, userRepo, paymentGateway)
-
-	// Initialize consumers
-	orderConsumer := consumer.NewOrderConsumer(orderInteractor)
+	// Wire automatically injects all dependencies
+	orderConsumer := InitializeWorker(w.db, w.cfg)
 
 	// Start consuming messages
-	log.Println("Worker is ready to consume messages")
+	logger.Info("Worker is ready to consume messages")
 	return orderConsumer.Start()
 }
