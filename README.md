@@ -52,13 +52,13 @@ This project follows Clean Architecture and Standard Go Project Layout principle
 │   │   ├── user.go
 │   │   └── order.go
 │   ├── usecase/            # Application business logic
-│   │   ├── port/           # Interface definitions
+│   │   ├── port/           # Port/Interface definitions
 │   │   │   ├── user_repository.go
 │   │   │   ├── order_repository.go
 │   │   │   └── payment_gateway.go
 │   │   ├── user_interactor.go
 │   │   └── order_interactor.go
-│   ├── interface/          # Interface implementations
+│   ├── adapter/            # Adapter/Implementation layer
 │   │   ├── repository/     # Data access implementations
 │   │   │   ├── user_repository_gorm.go
 │   │   │   ├── order_repository_gorm.go

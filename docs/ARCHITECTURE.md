@@ -39,14 +39,14 @@ This project implements Clean Architecture principles, organizing code into dist
 - `UserInteractor`: Handles user creation, password updates, etc.
 - `OrderInteractor`: Handles order processing, checkout, etc.
 
-### 3. Interface/Adapter Layer (`internal/interface/`)
+### 3. Adapter Layer (`internal/adapter/`)
 
-**Purpose**: Implements the interfaces defined by the use case layer.
+**Purpose**: Implements the ports (interfaces) defined by the use case layer.
 
 **Characteristics**:
 - Adapts external services to our domain needs
 - Handles data transformation
-- Contains infrastructure code
+- Contains infrastructure code (database, external APIs)
 
 **Structure**:
 - `repository/`: Database implementations
@@ -177,8 +177,8 @@ Interface  →  Port
 ```
 
 - **Domain** depends on nothing
-- **Use Case** depends only on Domain
-- **Interface** depends on Use Case and Domain
+- **Use Case** depends only on Domain and Port interfaces
+- **Adapter** depends on Use Case (Ports) and Domain
 - **Delivery** depends on Use Case and Domain
 
 ### Why This Matters
@@ -226,14 +226,15 @@ This application supports three runtime modes from a single codebase:
 
 ### 2. Use Case Layer
 - ✅ Define interfaces in `port/`
-- ✅ Depend only on interfaces
+- ✅ Depend only on interfaces (ports)
 - ✅ One interactor per entity
-- ❌ Don't import delivery or interface packages
+- ❌ Don't import delivery or adapter packages
 
-### 3. Interface Layer
+### 3. Adapter Layer
 - ✅ Transform between models and entities
 - ✅ Handle infrastructure concerns
 - ✅ Implement port interfaces
+- ✅ Connect to databases, external APIs, etc.
 - ❌ Don't expose infrastructure details
 
 ### 4. Delivery Layer

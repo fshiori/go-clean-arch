@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"go-clean-arch/internal/app"
-	"go-clean-arch/internal/interface/repository"
+	"go-clean-arch/internal/adapter/repository"
 	"go-clean-arch/pkg/config"
 	"go-clean-arch/pkg/logger"
 	"log"

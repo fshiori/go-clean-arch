@@ -3,7 +3,6 @@ package consumer
 import (
 	"encoding/json"
 	"fmt"
-	"go-clean-arch/internal/domain"
 	"go-clean-arch/internal/usecase"
 	"log"
 )

@@ -1,9 +1,9 @@
 package app
 
 import (
+	"go-clean-arch/internal/adapter/gateway"
+	"go-clean-arch/internal/adapter/repository"
 	"go-clean-arch/internal/delivery/consumer"
-	"go-clean-arch/internal/interface/gateway"
-	"go-clean-arch/internal/interface/repository"
 	"go-clean-arch/internal/usecase"
 	"log"
 
