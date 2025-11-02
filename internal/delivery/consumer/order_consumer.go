@@ -1,10 +1,13 @@
 package consumer
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"go-clean-arch/internal/usecase"
-	"log"
+	"go-clean-arch/pkg/logger"
+
+	"github.com/google/uuid"
 )
 
 // OrderConsumer consumes order-related messages from a message queue
@@ -28,76 +31,102 @@ type OrderMessage struct {
 
 // ConsumeMessage processes a message from the queue
 func (c *OrderConsumer) ConsumeMessage(messageBody []byte) error {
+	// Create context with trace ID for this message
+	ctx := context.Background()
+	traceID := uuid.New().String()
+	ctx = logger.WithTraceID(ctx, traceID)
+
 	var msg OrderMessage
 	if err := json.Unmarshal(messageBody, &msg); err != nil {
+		logger.ErrorContext(ctx, "Failed to unmarshal message", "error", err)
 		return fmt.Errorf("failed to unmarshal message: %w", err)
 	}
 
-	log.Printf("Processing message type: %s for order: %d", msg.Type, msg.OrderID)
+	logger.InfoContext(ctx, "Processing message",
+		"type", msg.Type,
+		"order_id", msg.OrderID,
+	)
 
+	var err error
 	switch msg.Type {
 	case "order.ship":
-		return c.handleShipOrder(msg.OrderID)
+		err = c.handleShipOrder(ctx, msg.OrderID)
 	case "order.complete":
-		return c.handleCompleteOrder(msg.OrderID)
+		err = c.handleCompleteOrder(ctx, msg.OrderID)
 	case "order.cancel":
-		return c.handleCancelOrder(msg.OrderID)
+		err = c.handleCancelOrder(ctx, msg.OrderID)
 	default:
-		return fmt.Errorf("unknown message type: %s", msg.Type)
+		err = fmt.Errorf("unknown message type: %s", msg.Type)
+		logger.ErrorContext(ctx, "Unknown message type", "type", msg.Type)
 	}
+
+	if err != nil {
+		logger.ErrorContext(ctx, "Failed to process message",
+			"type", msg.Type,
+			"order_id", msg.OrderID,
+			"error", err,
+		)
+	}
+
+	return err
 }
 
 // handleShipOrder processes order shipment
-func (c *OrderConsumer) handleShipOrder(orderID int64) error {
-	log.Printf("Shipping order: %d", orderID)
+func (c *OrderConsumer) handleShipOrder(ctx context.Context, orderID int64) error {
+	logger.InfoContext(ctx, "Shipping order", "order_id", orderID)
 
 	if err := c.orderInteractor.ShipOrder(orderID); err != nil {
+		logger.ErrorContext(ctx, "Failed to ship order", "order_id", orderID, "error", err)
 		return fmt.Errorf("failed to ship order: %w", err)
 	}
 
-	log.Printf("Order %d shipped successfully", orderID)
+	logger.InfoContext(ctx, "Order shipped successfully", "order_id", orderID)
 	return nil
 }
 
 // handleCompleteOrder processes order completion
-func (c *OrderConsumer) handleCompleteOrder(orderID int64) error {
-	log.Printf("Completing order: %d", orderID)
+func (c *OrderConsumer) handleCompleteOrder(ctx context.Context, orderID int64) error {
+	logger.InfoContext(ctx, "Completing order", "order_id", orderID)
 
 	if err := c.orderInteractor.CompleteOrder(orderID); err != nil {
+		logger.ErrorContext(ctx, "Failed to complete order", "order_id", orderID, "error", err)
 		return fmt.Errorf("failed to complete order: %w", err)
 	}
 
-	log.Printf("Order %d completed successfully", orderID)
+	logger.InfoContext(ctx, "Order completed successfully", "order_id", orderID)
 	return nil
 }
 
 // handleCancelOrder processes order cancellation
-func (c *OrderConsumer) handleCancelOrder(orderID int64) error {
-	log.Printf("Cancelling order: %d", orderID)
+func (c *OrderConsumer) handleCancelOrder(ctx context.Context, orderID int64) error {
+	logger.InfoContext(ctx, "Cancelling order", "order_id", orderID)
 
 	if err := c.orderInteractor.CancelOrder(orderID); err != nil {
+		logger.ErrorContext(ctx, "Failed to cancel order", "order_id", orderID, "error", err)
 		return fmt.Errorf("failed to cancel order: %w", err)
 	}
 
-	log.Printf("Order %d cancelled successfully", orderID)
+	logger.InfoContext(ctx, "Order cancelled successfully", "order_id", orderID)
 	return nil
 }
 
 // Start starts consuming messages from the queue
 // This is a simplified example; in production, you'd connect to a real message queue
 func (c *OrderConsumer) Start() error {
-	log.Println("Starting order consumer...")
+	logger.Info("Starting order consumer...")
 
 	// TODO: Connect to message queue (RabbitMQ, Kafka, etc.)
 	// Example:
 	// conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
 	// if err != nil {
+	//     logger.Error("Failed to connect to RabbitMQ", "error", err)
 	//     return err
 	// }
 	// defer conn.Close()
 	//
 	// ch, err := conn.Channel()
 	// if err != nil {
+	//     logger.Error("Failed to open channel", "error", err)
 	//     return err
 	// }
 	// defer ch.Close()
@@ -112,16 +141,19 @@ func (c *OrderConsumer) Start() error {
 	//     nil,           // args
 	// )
 	// if err != nil {
+	//     logger.Error("Failed to register consumer", "error", err)
 	//     return err
 	// }
 	//
+	// logger.Info("Order consumer connected and waiting for messages...")
+	//
 	// for msg := range msgs {
 	//     if err := c.ConsumeMessage(msg.Body); err != nil {
-	//         log.Printf("Error processing message: %v", err)
+	//         logger.Error("Error processing message", "error", err)
 	//     }
 	// }
 
-	log.Println("Order consumer is running...")
+	logger.Info("Order consumer is running...")
 
 	// Block forever
 	select {}

@@ -2,6 +2,7 @@ package http
 
 import (
 	"go-clean-arch/internal/delivery/http/handler"
+	"go-clean-arch/pkg/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -11,7 +12,17 @@ func Router(
 	userHandler *handler.UserHandler,
 	// Add other handlers here as needed
 ) *gin.Engine {
-	router := gin.Default()
+	// Create router without default middleware
+	router := gin.New()
+
+	// Add recovery middleware
+	router.Use(gin.Recovery())
+
+	// Add trace ID middleware (must be before logger)
+	router.Use(middleware.TraceID())
+
+	// Add request logger middleware
+	router.Use(middleware.RequestLogger())
 
 	// Health check endpoint
 	router.GET("/health", func(c *gin.Context) {

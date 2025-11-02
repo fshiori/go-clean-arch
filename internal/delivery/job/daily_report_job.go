@@ -1,10 +1,12 @@
 package job
 
 import (
+	"context"
 	"go-clean-arch/internal/usecase"
-	"log"
+	"go-clean-arch/pkg/logger"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
 )
 
@@ -27,7 +29,12 @@ func NewDailyReportJob(
 
 // Run executes the daily report job
 func (j *DailyReportJob) Run() error {
-	log.Println("Starting daily report generation...")
+	// Create context with trace ID for this job execution
+	ctx := context.Background()
+	traceID := uuid.New().String()
+	ctx = logger.WithTraceID(ctx, traceID)
+
+	logger.InfoContext(ctx, "Starting daily report generation")
 
 	// This is a simplified example
 	// In production, you would:
@@ -38,12 +45,15 @@ func (j *DailyReportJob) Run() error {
 	// Example: Get some statistics
 	users, err := j.userInteractor.ListUsers(1, 100)
 	if err != nil {
-		log.Printf("Error fetching users: %v", err)
+		logger.ErrorContext(ctx, "Error fetching users for report", "error", err)
 		return err
 	}
 
-	log.Printf("Daily Report - Total users: %d", len(users))
-	log.Printf("Report generated at: %s", time.Now().Format(time.RFC3339))
+	reportTime := time.Now()
+	logger.InfoContext(ctx, "Daily report generated",
+		"total_users", len(users),
+		"report_time", reportTime.Format(time.RFC3339),
+	)
 
 	// TODO: Implement actual report generation and distribution
 	// - Aggregate data
@@ -51,7 +61,7 @@ func (j *DailyReportJob) Run() error {
 	// - Send email to stakeholders
 	// - Store in cloud storage
 
-	log.Println("Daily report completed successfully")
+	logger.InfoContext(ctx, "Daily report completed successfully")
 	return nil
 }
 
@@ -71,24 +81,31 @@ func NewScheduler(dailyReportJob *DailyReportJob) *Scheduler {
 
 // Start starts all scheduled jobs
 func (s *Scheduler) Start() error {
-	log.Println("Starting cron scheduler...")
+	logger.Info("Starting cron scheduler...")
 
 	// Schedule daily report at midnight
 	_, err := s.cron.AddFunc("0 0 * * *", func() {
+		logger.Info("Triggering daily report job")
 		if err := s.dailyReportJob.Run(); err != nil {
-			log.Printf("Error running daily report: %v", err)
+			logger.Error("Error running daily report", "error", err)
 		}
 	})
 	if err != nil {
+		logger.Error("Failed to schedule daily report job", "error", err)
 		return err
 	}
 
 	// Add more scheduled jobs here
 	// Example: Every hour
-	// s.cron.AddFunc("0 * * * *", s.someOtherJob.Run)
+	// _, err = s.cron.AddFunc("0 * * * *", func() {
+	//     logger.Info("Triggering hourly job")
+	//     if err := s.someOtherJob.Run(); err != nil {
+	//         logger.Error("Error running hourly job", "error", err)
+	//     }
+	// })
 
 	s.cron.Start()
-	log.Println("Cron scheduler started successfully")
+	logger.Info("Cron scheduler started successfully", "jobs_count", len(s.cron.Entries()))
 
 	// Block forever
 	select {}
@@ -96,6 +113,7 @@ func (s *Scheduler) Start() error {
 
 // Stop stops the scheduler
 func (s *Scheduler) Stop() {
-	log.Println("Stopping cron scheduler...")
+	logger.Info("Stopping cron scheduler...")
 	s.cron.Stop()
+	logger.Info("Cron scheduler stopped")
 }

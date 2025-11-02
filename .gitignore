@@ -77,3 +77,11 @@ Temporary Items
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,visualstudiocode,go
+
+# Project specific
+# Build output
+bin/
+dist/
+
+# Local config files (use example files instead)
+configs/config.toml
