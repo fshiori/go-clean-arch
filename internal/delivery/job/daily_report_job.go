@@ -10,14 +10,14 @@ import (
 
 // DailyReportJob handles daily report generation
 type DailyReportJob struct {
-	userInteractor  *usecase.UserInteractor
-	orderInteractor *usecase.OrderInteractor
+	userInteractor  usecase.UserUsecase
+	orderInteractor usecase.OrderUsecase
 }
 
 // NewDailyReportJob creates a new DailyReportJob
 func NewDailyReportJob(
-	userInteractor *usecase.UserInteractor,
-	orderInteractor *usecase.OrderInteractor,
+	userInteractor usecase.UserUsecase,
+	orderInteractor usecase.OrderUsecase,
 ) *DailyReportJob {
 	return &DailyReportJob{
 		userInteractor:  userInteractor,

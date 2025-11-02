@@ -9,11 +9,11 @@ import (
 
 // OrderConsumer consumes order-related messages from a message queue
 type OrderConsumer struct {
-	orderInteractor *usecase.OrderInteractor
+	orderInteractor usecase.OrderUsecase
 }
 
 // NewOrderConsumer creates a new OrderConsumer
-func NewOrderConsumer(orderInteractor *usecase.OrderInteractor) *OrderConsumer {
+func NewOrderConsumer(orderInteractor usecase.OrderUsecase) *OrderConsumer {
 	return &OrderConsumer{
 		orderInteractor: orderInteractor,
 	}
