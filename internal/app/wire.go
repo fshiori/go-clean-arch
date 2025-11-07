@@ -19,7 +19,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/wire"
-	"gorm.io/gorm"
+	"github.com/jmoiron/sqlx"
 )
 
 // ProvideStripeAPIKey provides the Stripe API key from config
@@ -64,7 +64,7 @@ var JobSet = wire.NewSet(
 )
 
 // InitializeAPIRouter initializes the API router with all dependencies
-func InitializeAPIRouter(db *gorm.DB, cfg *config.Config) *gin.Engine {
+func InitializeAPIRouter(db *sqlx.DB, cfg *config.Config) *gin.Engine {
 	wire.Build(
 		RepositorySet,
 		UseCaseSet,
@@ -75,7 +75,7 @@ func InitializeAPIRouter(db *gorm.DB, cfg *config.Config) *gin.Engine {
 }
 
 // InitializeWorker initializes the worker with all dependencies
-func InitializeWorker(db *gorm.DB, cfg *config.Config) *consumer.OrderConsumer {
+func InitializeWorker(db *sqlx.DB, cfg *config.Config) *consumer.OrderConsumer {
 	wire.Build(
 		RepositorySet,
 		GatewaySet,
@@ -86,7 +86,7 @@ func InitializeWorker(db *gorm.DB, cfg *config.Config) *consumer.OrderConsumer {
 }
 
 // InitializeCronScheduler initializes the cron scheduler with all dependencies
-func InitializeCronScheduler(db *gorm.DB, cfg *config.Config) *job.Scheduler {
+func InitializeCronScheduler(db *sqlx.DB, cfg *config.Config) *job.Scheduler {
 	wire.Build(
 		RepositorySet,
 		GatewaySet,

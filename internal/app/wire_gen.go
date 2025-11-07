@@ -9,6 +9,7 @@ package app
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/wire"
+	"github.com/jmoiron/sqlx"
 	"go-clean-arch/internal/adapter/gateway"
 	"go-clean-arch/internal/adapter/repository"
 	"go-clean-arch/internal/delivery/consumer"
@@ -17,13 +18,12 @@ import (
 	"go-clean-arch/internal/delivery/job"
 	"go-clean-arch/internal/usecase"
 	"go-clean-arch/pkg/config"
-	"gorm.io/gorm"
 )
 
 // Injectors from wire.go:
 
 // InitializeAPIRouter initializes the API router with all dependencies
-func InitializeAPIRouter(db *gorm.DB, cfg *config.Config) *gin.Engine {
+func InitializeAPIRouter(db *sqlx.DB, cfg *config.Config) *gin.Engine {
 	userRepository := repository.NewUserRepository(db)
 	userInteractor := usecase.NewUserInteractor(userRepository)
 	userHandler := handler.NewUserHandler(userInteractor)
@@ -32,7 +32,7 @@ func InitializeAPIRouter(db *gorm.DB, cfg *config.Config) *gin.Engine {
 }
 
 // InitializeWorker initializes the worker with all dependencies
-func InitializeWorker(db *gorm.DB, cfg *config.Config) *consumer.OrderConsumer {
+func InitializeWorker(db *sqlx.DB, cfg *config.Config) *consumer.OrderConsumer {
 	orderRepository := repository.NewOrderRepository(db)
 	userRepository := repository.NewUserRepository(db)
 	string2 := ProvideStripeAPIKey(cfg)
@@ -43,7 +43,7 @@ func InitializeWorker(db *gorm.DB, cfg *config.Config) *consumer.OrderConsumer {
 }
 
 // InitializeCronScheduler initializes the cron scheduler with all dependencies
-func InitializeCronScheduler(db *gorm.DB, cfg *config.Config) *job.Scheduler {
+func InitializeCronScheduler(db *sqlx.DB, cfg *config.Config) *job.Scheduler {
 	userRepository := repository.NewUserRepository(db)
 	userInteractor := usecase.NewUserInteractor(userRepository)
 	orderRepository := repository.NewOrderRepository(db)

@@ -5,8 +5,8 @@ import (
 
 	"go-clean-arch/internal/app"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cobra"
-	"gorm.io/gorm"
 )
 
 // apiCmd represents the api command
@@ -36,7 +36,7 @@ func runAPI(cmd *cobra.Command, args []string) error {
 	}
 
 	// Type assert to concrete type
-	db, ok := dbInterface.(*gorm.DB)
+	db, ok := dbInterface.(*sqlx.DB)
 	if !ok {
 		return fmt.Errorf("invalid database type")
 	}

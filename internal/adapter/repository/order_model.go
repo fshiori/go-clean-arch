@@ -9,18 +9,13 @@ import (
 
 // OrderModel is the database model for orders
 type OrderModel struct {
-	ID          int64              `gorm:"column:id;primary_key;autoIncrement"`
-	UserID      int64              `gorm:"column:user_id;not null;index"`
-	TotalAmount float64            `gorm:"column:total_amount;not null"`
-	Status      string             `gorm:"column:status;not null"`
-	Items       OrderItemsJSON     `gorm:"column:items;type:json"`
-	CreatedAt   time.Time          `gorm:"column:created_at;not null"`
-	UpdatedAt   time.Time          `gorm:"column:updated_at;not null"`
-}
-
-// TableName specifies the table name for GORM
-func (OrderModel) TableName() string {
-	return "orders"
+	ID          int64          `db:"id"`
+	UserID      int64          `db:"user_id"`
+	TotalAmount float64        `db:"total_amount"`
+	Status      string         `db:"status"`
+	Items       OrderItemsJSON `db:"items"`
+	CreatedAt   time.Time      `db:"created_at"`
+	UpdatedAt   time.Time      `db:"updated_at"`
 }
 
 // OrderItemsJSON is a custom type for storing order items as JSON in the database

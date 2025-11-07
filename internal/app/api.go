@@ -7,18 +7,18 @@ import (
 	"go-clean-arch/pkg/config"
 	"go-clean-arch/pkg/logger"
 
-	"gorm.io/gorm"
+	"github.com/jmoiron/sqlx"
 )
 
 // APIServer represents the API server application
 type APIServer struct {
-	db   *gorm.DB
+	db   *sqlx.DB
 	cfg  *config.Config
 	port int
 }
 
 // NewAPIServer creates a new API server instance
-func NewAPIServer(db *gorm.DB, cfg *config.Config, port int) *APIServer {
+func NewAPIServer(db *sqlx.DB, cfg *config.Config, port int) *APIServer {
 	return &APIServer{
 		db:   db,
 		cfg:  cfg,

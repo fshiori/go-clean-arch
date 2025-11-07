@@ -4,17 +4,17 @@ import (
 	"go-clean-arch/pkg/config"
 	"go-clean-arch/pkg/logger"
 
-	"gorm.io/gorm"
+	"github.com/jmoiron/sqlx"
 )
 
 // Worker represents the background worker application
 type Worker struct {
-	db  *gorm.DB
+	db  *sqlx.DB
 	cfg *config.Config
 }
 
 // NewWorker creates a new Worker instance
-func NewWorker(db *gorm.DB, cfg *config.Config) *Worker {
+func NewWorker(db *sqlx.DB, cfg *config.Config) *Worker {
 	return &Worker{
 		db:  db,
 		cfg: cfg,

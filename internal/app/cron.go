@@ -4,17 +4,17 @@ import (
 	"go-clean-arch/pkg/config"
 	"go-clean-arch/pkg/logger"
 
-	"gorm.io/gorm"
+	"github.com/jmoiron/sqlx"
 )
 
 // CronScheduler represents the cron job scheduler application
 type CronScheduler struct {
-	db  *gorm.DB
+	db  *sqlx.DB
 	cfg *config.Config
 }
 
 // NewCronScheduler creates a new CronScheduler instance
-func NewCronScheduler(db *gorm.DB, cfg *config.Config) *CronScheduler {
+func NewCronScheduler(db *sqlx.DB, cfg *config.Config) *CronScheduler {
 	return &CronScheduler{
 		db:  db,
 		cfg: cfg,

@@ -1,29 +1,33 @@
 package repository
 
 import (
+	"database/sql"
 	"errors"
 	"go-clean-arch/internal/domain"
 	"go-clean-arch/internal/usecase/port"
+	"time"
 
-	"gorm.io/gorm"
+	"github.com/jmoiron/sqlx"
 )
 
-// orderRepositoryGORM is the GORM implementation of OrderRepository
-type orderRepositoryGORM struct {
-	db *gorm.DB
+// orderRepositorySQLX is the sqlx implementation of OrderRepository
+type orderRepositorySQLX struct {
+	db *sqlx.DB
 }
 
-// NewOrderRepository creates a new OrderRepository implementation
-func NewOrderRepository(db *gorm.DB) port.OrderRepository {
-	return &orderRepositoryGORM{db: db}
+// NewOrderRepository creates a new OrderRepository implementation using sqlx
+func NewOrderRepository(db *sqlx.DB) port.OrderRepository {
+	return &orderRepositorySQLX{db: db}
 }
 
 // FindByID retrieves an order by ID
-func (r *orderRepositoryGORM) FindByID(id int64) (*domain.Order, error) {
+func (r *orderRepositorySQLX) FindByID(id int64) (*domain.Order, error) {
 	var orderModel OrderModel
 
-	if err := r.db.First(&orderModel, id).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+	query := "SELECT id, user_id, total_amount, status, items, created_at, updated_at FROM orders WHERE id = ?"
+	err := r.db.Get(&orderModel, query, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errors.New("order not found")
 		}
 		return nil, err
@@ -33,10 +37,12 @@ func (r *orderRepositoryGORM) FindByID(id int64) (*domain.Order, error) {
 }
 
 // FindByUserID retrieves all orders for a specific user
-func (r *orderRepositoryGORM) FindByUserID(userID int64) ([]*domain.Order, error) {
+func (r *orderRepositorySQLX) FindByUserID(userID int64) ([]*domain.Order, error) {
 	var orderModels []OrderModel
 
-	if err := r.db.Where("user_id = ?", userID).Find(&orderModels).Error; err != nil {
+	query := "SELECT id, user_id, total_amount, status, items, created_at, updated_at FROM orders WHERE user_id = ?"
+	err := r.db.Select(&orderModels, query, userID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -49,44 +55,71 @@ func (r *orderRepositoryGORM) FindByUserID(userID int64) ([]*domain.Order, error
 }
 
 // Save creates a new order
-func (r *orderRepositoryGORM) Save(order *domain.Order) error {
+func (r *orderRepositorySQLX) Save(order *domain.Order) error {
 	orderModel := toOrderModel(order)
+	orderModel.CreatedAt = time.Now().UTC()
+	orderModel.UpdatedAt = time.Now().UTC()
 
-	if err := r.db.Create(orderModel).Error; err != nil {
+	query := `INSERT INTO orders (user_id, total_amount, status, items, created_at, updated_at)
+			  VALUES (?, ?, ?, ?, ?, ?)`
+
+	result, err := r.db.Exec(query,
+		orderModel.UserID,
+		orderModel.TotalAmount,
+		orderModel.Status,
+		orderModel.Items,
+		orderModel.CreatedAt,
+		orderModel.UpdatedAt,
+	)
+	if err != nil {
 		return err
 	}
 
-	// Update the domain entity with the generated ID
-	order.ID = orderModel.ID
+	// Get the generated ID
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
 
+	order.ID = id
 	return nil
 }
 
 // Update updates an existing order
-func (r *orderRepositoryGORM) Update(order *domain.Order) error {
+func (r *orderRepositorySQLX) Update(order *domain.Order) error {
 	orderModel := toOrderModel(order)
+	orderModel.UpdatedAt = time.Now().UTC()
 
-	if err := r.db.Save(orderModel).Error; err != nil {
-		return err
-	}
+	query := `UPDATE orders
+			  SET user_id = ?, total_amount = ?, status = ?, items = ?, updated_at = ?
+			  WHERE id = ?`
 
-	return nil
+	_, err := r.db.Exec(query,
+		orderModel.UserID,
+		orderModel.TotalAmount,
+		orderModel.Status,
+		orderModel.Items,
+		orderModel.UpdatedAt,
+		orderModel.ID,
+	)
+
+	return err
 }
 
 // UpdateStatus updates the status of an order
-func (r *orderRepositoryGORM) UpdateStatus(orderID int64, status domain.OrderStatus) error {
-	if err := r.db.Model(&OrderModel{}).Where("id = ?", orderID).Update("status", string(status)).Error; err != nil {
-		return err
-	}
-
-	return nil
+func (r *orderRepositorySQLX) UpdateStatus(orderID int64, status domain.OrderStatus) error {
+	query := "UPDATE orders SET status = ?, updated_at = ? WHERE id = ?"
+	_, err := r.db.Exec(query, string(status), time.Now().UTC(), orderID)
+	return err
 }
 
 // List retrieves orders with pagination
-func (r *orderRepositoryGORM) List(offset, limit int) ([]*domain.Order, error) {
+func (r *orderRepositorySQLX) List(offset, limit int) ([]*domain.Order, error) {
 	var orderModels []OrderModel
 
-	if err := r.db.Offset(offset).Limit(limit).Find(&orderModels).Error; err != nil {
+	query := "SELECT id, user_id, total_amount, status, items, created_at, updated_at FROM orders LIMIT ? OFFSET ?"
+	err := r.db.Select(&orderModels, query, limit, offset)
+	if err != nil {
 		return nil, err
 	}
 

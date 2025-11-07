@@ -8,16 +8,17 @@ import (
 	"go-clean-arch/pkg/config"
 	"go-clean-arch/pkg/logger"
 
-	"gorm.io/gorm"
+	"github.com/jmoiron/sqlx"
 )
 
 // InitializeDatabase initializes the database connection with configuration.
-// It handles connection setup and optional auto-migration.
+// It handles connection setup. Note: sqlx doesn't have auto-migration,
+// you should use migration tools like golang-migrate or sql files.
 //
 // This function encapsulates database setup logic to keep it out of the CMD layer,
 // maintaining clean architecture principles by avoiding infrastructure dependencies
 // in outer layers.
-func InitializeDatabase(cfg *config.Config) (*gorm.DB, error) {
+func InitializeDatabase(cfg *config.Config) (*sqlx.DB, error) {
 	dbConfig := repository.DBConfig{
 		Driver:   cfg.Database.Driver,
 		Host:     cfg.Database.Host,
@@ -39,13 +40,10 @@ func InitializeDatabase(cfg *config.Config) (*gorm.DB, error) {
 		"database", cfg.Database.DBName,
 	)
 
-	// Run auto-migration if enabled
+	// Note: AutoMigrate is removed. Use SQL migration files instead.
+	// See migrations/ directory for migration files.
 	if cfg.Database.AutoMigrate {
-		logger.Info("Running database migrations...")
-		if err := repository.AutoMigrate(db); err != nil {
-			return nil, fmt.Errorf("failed to run migrations: %w", err)
-		}
-		logger.Info("Database migrations completed")
+		logger.Warn("AutoMigrate is enabled but not supported with sqlx. Please use migration tools like golang-migrate.")
 	}
 
 	return db, nil
