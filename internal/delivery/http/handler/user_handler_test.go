@@ -10,6 +10,7 @@ import (
 
 	"go-clean-arch/internal/domain"
 	"go-clean-arch/internal/usecase/mocks"
+	"go-clean-arch/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 	"github.com/samber/oops"
@@ -30,6 +31,12 @@ func TestUserHandlerTestSuite(t *testing.T) {
 
 func (s *UserHandlerTestSuite) SetupTest() {
 	gin.SetMode(gin.TestMode)
+
+	// Initialize logger for tests
+	logger.Init(logger.Config{
+		Level:  "error", // Only show errors in tests
+		Format: "text",
+	})
 
 	s.userUsecase = new(mocks.MockUserUsecase)
 	s.handler = NewUserHandler(s.userUsecase)
@@ -291,12 +298,15 @@ func (s *UserHandlerTestSuite) TestListUsers_Success() {
 	// Assert
 	s.Equal(http.StatusOK, w.Code)
 
-	var response []UserResponse
+	var response ListUsersResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	s.NoError(err)
-	s.Len(response, 2)
-	s.Equal("user1@example.com", response[0].Email)
-	s.Equal("user2@example.com", response[1].Email)
+	s.Len(response.Users, 2)
+	s.Equal(2, response.TotalCount)
+	s.Equal(1, response.Page)
+	s.Equal(10, response.PageSize)
+	s.Equal("user1@example.com", response.Users[0].Email)
+	s.Equal("user2@example.com", response.Users[1].Email)
 }
 
 func (s *UserHandlerTestSuite) TestListUsers_DefaultPagination() {

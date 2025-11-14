@@ -89,11 +89,13 @@ var ErrorCodeToHTTPStatus = map[string]int{
 	ErrCodeInvalidEmail:       http.StatusBadRequest,
 	ErrCodeInvalidPassword:    http.StatusBadRequest,
 	ErrCodePasswordTooShort:   http.StatusBadRequest,
-	ErrCodeIncorrectPassword:  http.StatusBadRequest,
 	ErrCodeEmptyOrder:         http.StatusBadRequest,
 	ErrCodeInvalidOrderStatus: http.StatusBadRequest,
 	ErrCodeInvalidUserID:      http.StatusBadRequest,
 	ErrCodeInvalidQuantity:    http.StatusBadRequest,
+
+	// 401 Unauthorized
+	ErrCodeIncorrectPassword: http.StatusUnauthorized,
 
 	// 402 Payment Required
 	ErrCodePaymentFailed:     http.StatusPaymentRequired,

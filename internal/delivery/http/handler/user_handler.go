@@ -139,7 +139,7 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "user deleted successfully"})
+	c.Status(http.StatusNoContent)
 }
 
 // toUserResponse converts a domain.User to a UserResponse DTO

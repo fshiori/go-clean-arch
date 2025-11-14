@@ -3,11 +3,13 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 
 	"go-clean-arch/internal/domain"
 	"go-clean-arch/pkg/logger"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 	"github.com/samber/oops"
 )
 
@@ -41,8 +43,24 @@ func HandleError(c *gin.Context, err error) {
 		details    map[string]interface{}
 	)
 
-	// Try to extract oops error information
-	if oopsErr, ok := oops.AsOops(err); ok {
+	// Check for Gin validation errors first
+	if validationErrs, ok := err.(validator.ValidationErrors); ok {
+		statusCode = http.StatusBadRequest
+		errorCode = "VALIDATION_ERROR"
+		message = "Request validation failed"
+		details = make(map[string]interface{})
+		for _, fieldErr := range validationErrs {
+			details[fieldErr.Field()] = fieldErr.Tag()
+		}
+	} else if strings.Contains(err.Error(), "invalid character") ||
+		strings.Contains(err.Error(), "unexpected end of JSON") ||
+		strings.Contains(err.Error(), "cannot unmarshal") {
+		// Handle JSON parsing errors
+		statusCode = http.StatusBadRequest
+		errorCode = "INVALID_JSON"
+		message = err.Error()
+	} else if oopsErr, ok := oops.AsOops(err); ok {
+		// Try to extract oops error information
 		// Extract error code
 		if code := oopsErr.Code(); code != "" {
 			errorCode = code
