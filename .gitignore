@@ -84,4 +84,5 @@ bin/
 dist/
 
 # Local config files (use example files instead)
-configs/config.toml
+configs/config.tomlcoverage.html
+coverage.out
