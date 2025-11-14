@@ -43,7 +43,7 @@ func (j *DailyReportJob) Run() error {
 	// 3. Send email or save report
 
 	// Example: Get some statistics
-	users, err := j.userInteractor.ListUsers(1, 100)
+	users, err := j.userInteractor.ListUsers(ctx, 1, 100)
 	if err != nil {
 		logger.ErrorContext(ctx, "Error fetching users for report", "error", err)
 		return err

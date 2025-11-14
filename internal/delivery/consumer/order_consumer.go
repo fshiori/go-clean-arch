@@ -75,7 +75,7 @@ func (c *OrderConsumer) ConsumeMessage(messageBody []byte) error {
 func (c *OrderConsumer) handleShipOrder(ctx context.Context, orderID int64) error {
 	logger.InfoContext(ctx, "Shipping order", "order_id", orderID)
 
-	if err := c.orderInteractor.ShipOrder(orderID); err != nil {
+	if err := c.orderInteractor.ShipOrder(ctx, orderID); err != nil {
 		logger.ErrorContext(ctx, "Failed to ship order", "order_id", orderID, "error", err)
 		return fmt.Errorf("failed to ship order: %w", err)
 	}
@@ -88,7 +88,7 @@ func (c *OrderConsumer) handleShipOrder(ctx context.Context, orderID int64) erro
 func (c *OrderConsumer) handleCompleteOrder(ctx context.Context, orderID int64) error {
 	logger.InfoContext(ctx, "Completing order", "order_id", orderID)
 
-	if err := c.orderInteractor.CompleteOrder(orderID); err != nil {
+	if err := c.orderInteractor.CompleteOrder(ctx, orderID); err != nil {
 		logger.ErrorContext(ctx, "Failed to complete order", "order_id", orderID, "error", err)
 		return fmt.Errorf("failed to complete order: %w", err)
 	}
@@ -101,7 +101,7 @@ func (c *OrderConsumer) handleCompleteOrder(ctx context.Context, orderID int64) 
 func (c *OrderConsumer) handleCancelOrder(ctx context.Context, orderID int64) error {
 	logger.InfoContext(ctx, "Cancelling order", "order_id", orderID)
 
-	if err := c.orderInteractor.CancelOrder(orderID); err != nil {
+	if err := c.orderInteractor.CancelOrder(ctx, orderID); err != nil {
 		logger.ErrorContext(ctx, "Failed to cancel order", "order_id", orderID, "error", err)
 		return fmt.Errorf("failed to cancel order: %w", err)
 	}
