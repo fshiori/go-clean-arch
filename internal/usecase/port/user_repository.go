@@ -1,25 +1,28 @@
 package port
 
-import "go-clean-arch/internal/domain"
+import (
+	"context"
+	"go-clean-arch/internal/domain"
+)
 
 // UserRepository defines the interface for user data access
 // This is defined in the usecase layer, following the dependency inversion principle
 type UserRepository interface {
 	// FindByID retrieves a user by their ID
-	FindByID(id int64) (*domain.User, error)
+	FindByID(ctx context.Context, id int64) (*domain.User, error)
 
 	// FindByEmail retrieves a user by their email
-	FindByEmail(email string) (*domain.User, error)
+	FindByEmail(ctx context.Context, email string) (*domain.User, error)
 
 	// Save creates a new user
-	Save(user *domain.User) error
+	Save(ctx context.Context, user *domain.User) error
 
 	// Update updates an existing user
-	Update(user *domain.User) error
+	Update(ctx context.Context, user *domain.User) error
 
 	// Delete deletes a user by ID
-	Delete(id int64) error
+	Delete(ctx context.Context, id int64) error
 
 	// List retrieves users with pagination
-	List(offset, limit int) ([]*domain.User, error)
+	List(ctx context.Context, offset, limit int) ([]*domain.User, error)
 }

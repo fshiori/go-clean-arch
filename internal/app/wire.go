@@ -67,6 +67,7 @@ var JobSet = wire.NewSet(
 func InitializeAPIRouter(db *sqlx.DB, cfg *config.Config) *gin.Engine {
 	wire.Build(
 		RepositorySet,
+		GatewaySet,
 		UseCaseSet,
 		HandlerSet,
 		http.Router,

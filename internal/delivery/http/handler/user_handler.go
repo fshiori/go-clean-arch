@@ -1,10 +1,12 @@
 package handler
 
 import (
-	"go-clean-arch/internal/domain"
-	"go-clean-arch/internal/usecase"
 	"net/http"
 	"strconv"
+
+	"go-clean-arch/internal/domain"
+	"go-clean-arch/internal/usecase"
+	"go-clean-arch/pkg/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -27,14 +29,14 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 
 	// Bind and validate request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
 	// Call usecase
-	user, err := h.userInteractor.CreateUser(req.Email, req.Password)
+	user, err := h.userInteractor.CreateUser(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -50,14 +52,14 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID format"})
 		return
 	}
 
 	// Call usecase
-	user, err := h.userInteractor.GetUserByID(id)
+	user, err := h.userInteractor.GetUserByID(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -73,19 +75,19 @@ func (h *UserHandler) UpdatePassword(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID format"})
 		return
 	}
 
 	var req UpdatePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
 	// Call usecase
-	if err := h.userInteractor.UpdateUserPassword(id, req.OldPassword, req.NewPassword); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := h.userInteractor.UpdateUserPassword(c.Request.Context(), id, req.OldPassword, req.NewPassword); err != nil {
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -99,9 +101,9 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 
 	// Call usecase
-	users, err := h.userInteractor.ListUsers(page, pageSize)
+	users, err := h.userInteractor.ListUsers(c.Request.Context(), page, pageSize)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		middleware.HandleError(c, err)
 		return
 	}
 
@@ -127,13 +129,13 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID format"})
 		return
 	}
 
 	// Call usecase
-	if err := h.userInteractor.DeleteUser(id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err := h.userInteractor.DeleteUser(c.Request.Context(), id); err != nil {
+		middleware.HandleError(c, err)
 		return
 	}
 
