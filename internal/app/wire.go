@@ -50,6 +50,8 @@ var UseCaseSet = wire.NewSet(
 // HandlerSet provides all HTTP handler dependencies
 var HandlerSet = wire.NewSet(
 	handler.NewUserHandler,
+	handler.NewOrderHandler,
+	handler.NewHealthHandler,
 )
 
 // ConsumerSet provides all message consumer dependencies

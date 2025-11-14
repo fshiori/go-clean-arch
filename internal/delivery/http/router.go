@@ -10,7 +10,8 @@ import (
 // Router sets up all HTTP routes
 func Router(
 	userHandler *handler.UserHandler,
-	// Add other handlers here as needed
+	orderHandler *handler.OrderHandler,
+	healthHandler *handler.HealthHandler,
 ) *gin.Engine {
 	// Create router without default middleware
 	router := gin.New()
@@ -24,12 +25,10 @@ func Router(
 	// Add request logger middleware
 	router.Use(middleware.RequestLogger())
 
-	// Health check endpoint
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"status": "ok",
-		})
-	})
+	// Health check endpoints (for Kubernetes probes and monitoring)
+	router.GET("/health", healthHandler.HealthCheck)      // Comprehensive health check
+	router.GET("/ready", healthHandler.ReadinessCheck)    // Readiness probe
+	router.GET("/live", healthHandler.LivenessCheck)      // Liveness probe
 
 	// API v1 routes
 	v1 := router.Group("/api/v1")
@@ -44,13 +43,19 @@ func Router(
 			users.DELETE("/:id", userHandler.DeleteUser)
 		}
 
-		// Order routes can be added here
-		// orders := v1.Group("/orders")
-		// {
-		//     orders.POST("", orderHandler.CreateOrder)
-		//     orders.GET("/:id", orderHandler.GetOrder)
-		//     ...
-		// }
+		// Order routes
+		orders := v1.Group("/orders")
+		{
+			orders.POST("", orderHandler.CreateOrder)
+			orders.GET("/:id", orderHandler.GetOrder)
+			orders.POST("/:id/checkout", orderHandler.Checkout)
+			orders.POST("/:id/ship", orderHandler.ShipOrder)
+			orders.POST("/:id/complete", orderHandler.CompleteOrder)
+			orders.POST("/:id/cancel", orderHandler.CancelOrder)
+		}
+
+		// User's orders
+		v1.GET("/users/:userId/orders", orderHandler.ListUserOrders)
 	}
 
 	return router
