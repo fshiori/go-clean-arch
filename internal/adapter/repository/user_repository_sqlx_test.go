@@ -152,7 +152,7 @@ func (s *UserRepositorySQLXTestSuite) TestUpdate_Success() {
 	originalUpdatedAt := user.UpdatedAt
 	time.Sleep(10 * time.Millisecond) // Ensure time difference
 
-	err = user.UpdatePassword("password123", "newpassword456")
+	err = user.ChangePassword("password123", "newpassword456")
 	s.Require().NoError(err)
 
 	err = s.repo.Update(ctx, user)
@@ -162,7 +162,7 @@ func (s *UserRepositorySQLXTestSuite) TestUpdate_Success() {
 	// Verify update
 	found, err := s.repo.FindByID(ctx, user.ID)
 	s.NoError(err)
-	s.True(found.VerifyPassword("newpassword456"))
+	s.True(found.IsPasswordCorrect("newpassword456"))
 }
 
 func (s *UserRepositorySQLXTestSuite) TestUpdate_NotFound() {
