@@ -3,12 +3,14 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"go-clean-arch/internal/domain"
-	"go-clean-arch/internal/usecase/port"
 	"net/http"
 	"time"
+
+	"go-clean-arch/internal/domain"
+	"go-clean-arch/internal/usecase/port"
+
+	"github.com/samber/oops"
 )
 
 // stripeGateway implements the PaymentGateway interface for Stripe
@@ -39,10 +41,10 @@ type stripeChargeRequest struct {
 
 // stripeChargeResponse represents the response from Stripe API
 type stripeChargeResponse struct {
-	ID            string `json:"id"`
-	Amount        int64  `json:"amount"`
-	Status        string `json:"status"`
-	FailureCode   string `json:"failure_code,omitempty"`
+	ID             string `json:"id"`
+	Amount         int64  `json:"amount"`
+	Status         string `json:"status"`
+	FailureCode    string `json:"failure_code,omitempty"`
 	FailureMessage string `json:"failure_message,omitempty"`
 }
 
@@ -59,13 +61,24 @@ func (g *stripeGateway) CreateTransaction(order *domain.Order, paymentInfo *port
 	// Marshal request
 	reqBody, err := json.Marshal(chargeReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, oops.
+			Code("PAYMENT_GATEWAY_ERROR").
+			In("gateway").
+			Tags("stripe", "marshal").
+			With("order_id", order.ID).
+			Hint("Failed to marshal payment request").
+			Wrapf(err, "failed to marshal Stripe request")
 	}
 
 	// Create HTTP request
 	req, err := http.NewRequest("POST", g.baseURL+"/charges", bytes.NewBuffer(reqBody))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, oops.
+			Code("PAYMENT_GATEWAY_ERROR").
+			In("gateway").
+			Tags("stripe", "http").
+			With("order_id", order.ID).
+			Wrapf(err, "failed to create HTTP request")
 	}
 
 	// Set headers
@@ -75,19 +88,40 @@ func (g *stripeGateway) CreateTransaction(order *domain.Order, paymentInfo *port
 	// Execute request
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
+		return nil, oops.
+			Code("PAYMENT_GATEWAY_ERROR").
+			In("gateway").
+			Tags("stripe", "http", "network").
+			With("order_id", order.ID).
+			With("url", g.baseURL+"/charges").
+			Hint("Check network connectivity and Stripe API status").
+			Wrapf(err, "failed to execute Stripe API request")
 	}
 	defer resp.Body.Close()
 
 	// Parse response
 	var chargeResp stripeChargeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&chargeResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+		return nil, oops.
+			Code("PAYMENT_GATEWAY_ERROR").
+			In("gateway").
+			Tags("stripe", "decode").
+			With("order_id", order.ID).
+			With("status_code", resp.StatusCode).
+			Wrapf(err, "failed to decode Stripe response")
 	}
 
 	// Check for errors
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("stripe error: %s - %s", chargeResp.FailureCode, chargeResp.FailureMessage)
+		return nil, oops.
+			Code("PAYMENT_DECLINED").
+			In("gateway").
+			Tags("stripe", "declined").
+			With("order_id", order.ID).
+			With("failure_code", chargeResp.FailureCode).
+			With("status_code", resp.StatusCode).
+			Hint(chargeResp.FailureMessage).
+			Errorf("payment declined by Stripe")
 	}
 
 	// Convert Stripe response to domain Transaction
@@ -111,7 +145,12 @@ func (g *stripeGateway) GetTransactionStatus(transactionID string) (port.Transac
 	// Create HTTP request
 	req, err := http.NewRequest("GET", g.baseURL+"/charges/"+transactionID, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return "", oops.
+			Code("PAYMENT_GATEWAY_ERROR").
+			In("gateway").
+			Tags("stripe", "http").
+			With("transaction_id", transactionID).
+			Wrapf(err, "failed to create HTTP request")
 	}
 
 	// Set headers
@@ -120,14 +159,26 @@ func (g *stripeGateway) GetTransactionStatus(transactionID string) (port.Transac
 	// Execute request
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to execute request: %w", err)
+		return "", oops.
+			Code("PAYMENT_GATEWAY_ERROR").
+			In("gateway").
+			Tags("stripe", "http", "network").
+			With("transaction_id", transactionID).
+			Hint("Check network connectivity and Stripe API status").
+			Wrapf(err, "failed to execute Stripe API request")
 	}
 	defer resp.Body.Close()
 
 	// Parse response
 	var chargeResp stripeChargeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&chargeResp); err != nil {
-		return "", fmt.Errorf("failed to decode response: %w", err)
+		return "", oops.
+			Code("PAYMENT_GATEWAY_ERROR").
+			In("gateway").
+			Tags("stripe", "decode").
+			With("transaction_id", transactionID).
+			With("status_code", resp.StatusCode).
+			Wrapf(err, "failed to decode Stripe response")
 	}
 
 	return mapStripeStatus(chargeResp.Status), nil
@@ -147,13 +198,24 @@ func (g *stripeGateway) RefundTransaction(transactionID string, amount float64) 
 	// Marshal request
 	reqBody, err := json.Marshal(refundReq)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
+		return oops.
+			Code("PAYMENT_GATEWAY_ERROR").
+			In("gateway").
+			Tags("stripe", "marshal").
+			With("transaction_id", transactionID).
+			With("amount", amount).
+			Wrapf(err, "failed to marshal refund request")
 	}
 
 	// Create HTTP request
 	req, err := http.NewRequest("POST", g.baseURL+"/refunds", bytes.NewBuffer(reqBody))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return oops.
+			Code("PAYMENT_GATEWAY_ERROR").
+			In("gateway").
+			Tags("stripe", "http").
+			With("transaction_id", transactionID).
+			Wrapf(err, "failed to create HTTP request")
 	}
 
 	// Set headers
@@ -163,12 +225,25 @@ func (g *stripeGateway) RefundTransaction(transactionID string, amount float64) 
 	// Execute request
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to execute request: %w", err)
+		return oops.
+			Code("PAYMENT_GATEWAY_ERROR").
+			In("gateway").
+			Tags("stripe", "http", "network").
+			With("transaction_id", transactionID).
+			Hint("Check network connectivity and Stripe API status").
+			Wrapf(err, "failed to execute Stripe refund request")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("failed to process refund")
+		return oops.
+			Code("REFUND_FAILED").
+			In("gateway").
+			Tags("stripe", "refund").
+			With("transaction_id", transactionID).
+			With("status_code", resp.StatusCode).
+			Hint("Refund was rejected by Stripe").
+			Errorf("failed to process refund")
 	}
 
 	return nil

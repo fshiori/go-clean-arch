@@ -27,7 +27,13 @@ func InitializeAPIRouter(db *sqlx.DB, cfg *config.Config) *gin.Engine {
 	userRepository := repository.NewUserRepository(db)
 	userInteractor := usecase.NewUserInteractor(userRepository)
 	userHandler := handler.NewUserHandler(userInteractor)
-	engine := http.Router(userHandler)
+	orderRepository := repository.NewOrderRepository(db)
+	string2 := ProvideStripeAPIKey(cfg)
+	paymentGateway := gateway.NewStripeGateway(string2)
+	orderInteractor := usecase.NewOrderInteractor(orderRepository, userRepository, paymentGateway)
+	orderHandler := handler.NewOrderHandler(orderInteractor)
+	healthHandler := handler.NewHealthHandler(db)
+	engine := http.Router(userHandler, orderHandler, healthHandler)
 	return engine
 }
 
@@ -74,7 +80,7 @@ var GatewaySet = wire.NewSet(
 var UseCaseSet = wire.NewSet(usecase.NewUserInteractor, usecase.NewOrderInteractor, wire.Bind(new(usecase.UserUsecase), new(*usecase.UserInteractor)), wire.Bind(new(usecase.OrderUsecase), new(*usecase.OrderInteractor)))
 
 // HandlerSet provides all HTTP handler dependencies
-var HandlerSet = wire.NewSet(handler.NewUserHandler)
+var HandlerSet = wire.NewSet(handler.NewUserHandler, handler.NewOrderHandler, handler.NewHealthHandler)
 
 // ConsumerSet provides all message consumer dependencies
 var ConsumerSet = wire.NewSet(consumer.NewOrderConsumer)
