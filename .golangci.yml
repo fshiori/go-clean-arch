@@ -1,0 +1,238 @@
+run:
+  # Timeout for analysis
+  timeout: 5m
+
+  # Include test files
+  tests: true
+
+  # Directories to skip
+  skip-dirs:
+    - vendor
+    - bin
+    - .git
+
+  # Files to skip
+  skip-files:
+    - ".*\\.pb\\.go$"
+    - ".*_gen\\.go$"
+    - "wire_gen.go"
+
+linters:
+  enable:
+    # Default linters
+    - errcheck      # Check for unchecked errors
+    - gosimple      # Simplify code
+    - govet         # Vet examines Go source code
+    - ineffassign   # Detect ineffectual assignments
+    - staticcheck   # Advanced Go linter
+    - unused        # Check for unused code
+
+    # Additional recommended linters
+    - gofmt         # Check if code is formatted
+    - goimports     # Check if imports are formatted
+    - misspell      # Find commonly misspelled words
+    - unconvert     # Remove unnecessary type conversions
+    - goconst       # Find repeated strings that could be constants
+    - gocyclo       # Check cyclomatic complexity
+    - dupl          # Find duplicated code
+    - gosec         # Security checker
+    - bodyclose     # Check HTTP response body is closed
+    - noctx         # Find sending http request without context.Context
+    - gocritic      # Opinionated Go linter
+    - revive        # Fast, configurable, extensible, flexible, and beautiful linter for Go
+    - stylecheck    # Replacement for golint
+    - unparam       # Find unused function parameters
+
+  disable:
+    - typecheck     # Can have issues with generics
+
+linters-settings:
+  # Cyclomatic complexity
+  gocyclo:
+    min-complexity: 15
+
+  # Duplicated code detection
+  dupl:
+    threshold: 100
+
+  # Error checking
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  # Formatting
+  gofmt:
+    simplify: true
+
+  goimports:
+    local-prefixes: github.com/yourorg/go-clean-arch
+
+  # Constant detection
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+
+  # Security
+  gosec:
+    severity: medium
+    confidence: medium
+    excludes:
+      - G104  # Audit errors not checked (covered by errcheck)
+      - G304  # File path provided as taint input (false positives)
+
+  # Code criticism
+  gocritic:
+    enabled-checks:
+      - appendAssign
+      - argOrder
+      - assignOp
+      - badCall
+      - badCond
+      - boolExprSimplify
+      - builtinShadow
+      - captLocal
+      - caseOrder
+      - codegenComment
+      - commentedOutCode
+      - commentedOutImport
+      - defaultCaseOrder
+      - deprecatedComment
+      - dupArg
+      - dupBranchBody
+      - dupCase
+      - dupSubExpr
+      - elseif
+      - emptyFallthrough
+      - emptyStringTest
+      - equalFold
+      - exitAfterDefer
+      - flagDeref
+      - flagName
+      - hexLiteral
+      - ifElseChain
+      - indexAlloc
+      - initClause
+      - methodExprCall
+      - nestingReduce
+      - newDeref
+      - nilValReturn
+      - octalLiteral
+      - offBy1
+      - paramTypeCombine
+      - rangeExprCopy
+      - rangeValCopy
+      - regexpMust
+      - regexpPattern
+      - singleCaseSwitch
+      - sloppyLen
+      - stringXbytes
+      - switchTrue
+      - typeAssertChain
+      - typeSwitchVar
+      - typeUnparen
+      - unlabelStmt
+      - unlambda
+      - unslice
+      - valSwap
+      - weakCond
+      - wrapperFunc
+      - yodaStyleExpr
+
+  # Revive configuration
+  revive:
+    severity: warning
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+      - name: empty-block
+      - name: superfluous-else
+      - name: unused-parameter
+      - name: unreachable-code
+      - name: redefines-builtin-id
+
+  # Style check
+  stylecheck:
+    checks: ["all", "-ST1000", "-ST1003", "-ST1016", "-ST1020", "-ST1021", "-ST1022"]
+    dot-import-whitelist:
+      - github.com/onsi/ginkgo/v2
+      - github.com/onsi/gomega
+
+  # Unused parameters
+  unparam:
+    check-exported: false
+
+issues:
+  # Maximum issues count per one linter
+  max-issues-per-linter: 0
+
+  # Maximum count of issues with the same text
+  max-same-issues: 0
+
+  # Exclude specific rules
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+
+    # Exclude wire generated files
+    - path: wire_gen\.go
+      linters:
+        - all
+
+    # Exclude some linters from running on specific directories
+    - path: internal/domain/
+      linters:
+        - revive
+      text: "exported: exported (type|method|function) .* should have comment"
+
+    # Ignore long lines in generated files
+    - path: ".*\\.pb\\.go"
+      linters:
+        - lll
+
+    # Ignore certain false positives
+    - linters:
+        - staticcheck
+      text: "SA1019:"  # Ignore deprecated warnings for now
+
+    # Allow globals in main packages
+    - path: cmd/
+      linters:
+        - gochecknoglobals
+
+  # Independently from option `exclude` we use default exclude patterns
+  exclude-use-default: false
+
+output:
+  # Colored output
+  format: colored-line-number
+
+  # Print lines of code with issue
+  print-issued-lines: true
+
+  # Print linter name in the end of issue text
+  print-linter-name: true
+
+  # Sort results by: filepath, line and column
+  sort-results: true
