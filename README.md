@@ -96,8 +96,8 @@ This project follows Clean Architecture and Standard Go Project Layout principle
 
 ### Prerequisites
 
-- Go 1.21 or higher
-- PostgreSQL/MySQL (or SQLite for development)
+- Go 1.24 or higher
+- MySQL (PostgreSQL support coming soon)
 - RabbitMQ (for worker mode, optional)
 
 ### Installation

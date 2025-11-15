@@ -100,7 +100,18 @@ func (i *OrderInteractor) Checkout(ctx context.Context, orderID int64, paymentIn
 			Wrapf(err, "failed to fetch order")
 	}
 
-	// Verify order is in pending status
+	// Verify order is in pending status (idempotency check)
+	// If order is already paid, return success (idempotent operation)
+	if order.Status == domain.OrderStatusPaid {
+		// Order already paid - this might be a retry, return existing transaction info
+		// In production, you should fetch the actual transaction from a payment_transactions table
+		return &port.Transaction{
+			ID:     "already-paid",
+			Status: port.TransactionStatusCompleted,
+			Amount: order.TotalAmount,
+		}, nil
+	}
+
 	if order.Status != domain.OrderStatusPending {
 		return nil, oops.
 			Code(domain.ErrCodeInvalidOrderStatus).
@@ -112,6 +123,13 @@ func (i *OrderInteractor) Checkout(ctx context.Context, orderID int64, paymentIn
 			Hint("Can only checkout pending orders").
 			Wrap(domain.ErrInvalidOrderStatus)
 	}
+
+	// IMPORTANT: This implementation has a race condition between payment and DB update.
+	// Production solutions should use one of:
+	// 1. Database transaction with payment record (store pending payment, then update)
+	// 2. Saga pattern with compensation (refund if DB update fails)
+	// 3. Event sourcing (record all state changes as events)
+	// 4. Outbox pattern (atomic DB write + message queue)
 
 	// Process payment through gateway (abstracted)
 	transaction, err := i.paymentGateway.CreateTransaction(order, paymentInfo)
@@ -128,23 +146,37 @@ func (i *OrderInteractor) Checkout(ctx context.Context, orderID int64, paymentIn
 
 	// Check if payment was successful
 	if transaction.Status == port.TransactionStatusCompleted {
-		// Mark order as paid
+		// Mark order as paid in memory
 		if err := order.MarkAsPaid(); err != nil {
+			// If we can't mark as paid in memory, something is wrong with business logic
+			// Payment was successful but we can't update order status
+			// TODO: In production, implement compensation logic here (refund)
 			return nil, oops.
+				Code(domain.ErrCodeInvalidOrderStatus).
 				In("order_usecase").
-				Tags("checkout", "status_update").
+				Tags("checkout", "status_update", "critical").
 				With("order_id", orderID).
+				With("transaction_id", transaction.ID).
+				Hint("CRITICAL: Payment succeeded but order status update failed. Manual intervention required.").
 				Wrapf(err, "failed to mark order as paid")
 		}
 
-		// Update order in repository
+		// Persist order status to database
+		// CRITICAL SECTION: If this fails, payment is taken but order not marked as paid
 		if err := i.orderRepo.Update(ctx, order); err != nil {
+			// TODO: In production, implement one of:
+			// 1. Retry with exponential backoff
+			// 2. Write to dead letter queue for manual processing
+			// 3. Initiate refund through payment gateway
+			// 4. Store in separate "failed_payment_updates" table for reconciliation
 			return nil, oops.
 				Code(domain.ErrCodeOrderUpdateFailed).
 				In("order_usecase").
-				Tags("checkout", "database").
+				Tags("checkout", "database", "critical", "requires_manual_intervention").
 				With("order_id", orderID).
-				Hint("Order was paid but database update failed - manual intervention may be required").
+				With("transaction_id", transaction.ID).
+				With("amount_charged", transaction.Amount).
+				Hint("CRITICAL: Payment succeeded but database update failed. Customer was charged. Manual reconciliation required.").
 				Wrapf(err, "failed to update order after payment")
 		}
 	}
@@ -156,7 +188,7 @@ func (i *OrderInteractor) Checkout(ctx context.Context, orderID int64, paymentIn
 func (i *OrderInteractor) GetOrderByID(ctx context.Context, orderID int64) (*domain.Order, error) {
 	if orderID <= 0 {
 		return nil, oops.
-			Code(domain.ErrCodeInvalidUserID).
+			Code(domain.ErrCodeInvalidOrderID).
 			In("order_usecase").
 			With("order_id", orderID).
 			Hint("Order ID must be a positive integer").
