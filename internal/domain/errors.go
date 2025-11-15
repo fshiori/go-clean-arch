@@ -24,6 +24,7 @@ const (
 	ErrCodeEmptyOrder         = "EMPTY_ORDER"
 	ErrCodeInvalidOrderStatus = "INVALID_ORDER_STATUS"
 	ErrCodeInvalidUserID      = "INVALID_USER_ID"
+	ErrCodeInvalidOrderID     = "INVALID_ORDER_ID"
 	ErrCodeInvalidQuantity    = "INVALID_QUANTITY"
 
 	// Payment errors
@@ -67,6 +68,7 @@ var (
 	ErrEmptyOrder         = errors.New("order must have at least one item")
 	ErrInvalidOrderStatus = errors.New("invalid order status transition")
 	ErrInvalidUserID      = errors.New("invalid user ID")
+	ErrInvalidOrderID     = errors.New("invalid order ID")
 	ErrInvalidQuantity    = errors.New("invalid quantity")
 
 	// Payment errors
@@ -92,6 +94,7 @@ var ErrorCodeToHTTPStatus = map[string]int{
 	ErrCodeEmptyOrder:         http.StatusBadRequest,
 	ErrCodeInvalidOrderStatus: http.StatusBadRequest,
 	ErrCodeInvalidUserID:      http.StatusBadRequest,
+	ErrCodeInvalidOrderID:     http.StatusBadRequest,
 	ErrCodeInvalidQuantity:    http.StatusBadRequest,
 
 	// 401 Unauthorized
