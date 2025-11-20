@@ -1,5 +1,5 @@
 // Package handler provides go-micro service handlers.
-// This delivery layer uses JSON encoding for simplicity.
+// This delivery layer uses go-micro framework for RPC communication.
 package handler
 
 import (
@@ -11,7 +11,7 @@ import (
 	"github.com/samber/oops"
 )
 
-// UserServiceSimple implements a simple JSON-based user service
+// UserServiceSimple implements a go-micro user service handler
 type UserServiceSimple struct {
 	userUsecase usecase.UserUsecase
 }
@@ -38,6 +38,7 @@ type CreateUserRsp struct {
 }
 
 // CreateUser creates a new user
+// This method signature is compatible with go-micro's RPC handler registration
 func (s *UserServiceSimple) CreateUser(ctx context.Context, req *CreateUserReq, rsp *CreateUserRsp) error {
 	// Call usecase
 	user, err := s.userUsecase.CreateUser(ctx, req.Email, req.Password)

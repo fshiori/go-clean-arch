@@ -256,22 +256,34 @@ The cron scheduler will start and run scheduled jobs.
 
 The microservice will start a JSON-RPC style server for inter-service communication.
 
+**Implementation Note**: The current implementation uses a simple HTTP-based RPC approach with handler signatures compatible with go-micro framework. This demonstrates the microservice delivery layer pattern while remaining framework-agnostic. For production deployments, you can easily integrate with [go-micro](https://go-micro.dev) or other RPC frameworks.
+
 **Available RPC Endpoints:**
 
-- `POST /rpc/user/create` - Create a new user
-- `POST /rpc/user/get` - Get user by ID
-- `POST /rpc/user/list` - List users (with pagination)
-- `POST /rpc/user/update-password` - Update user password
-- `POST /rpc/user/delete` - Delete user
+- `POST /rpc/UserServiceSimple.CreateUser` - Create a new user
+- `POST /rpc/UserServiceSimple.GetUser` - Get user by ID
+- `POST /rpc/UserServiceSimple.ListUsers` - List users (with pagination)
+- `POST /rpc/UserServiceSimple.UpdatePassword` - Update user password
+- `POST /rpc/UserServiceSimple.DeleteUser` - Delete user
 - `GET /info` - Service information
 
 **Example RPC call:**
 
 ```bash
-curl -X POST http://localhost:8081/rpc/user/create \
+curl -X POST http://localhost:8081/rpc/UserServiceSimple.CreateUser \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"secret123"}'
 ```
+
+**Integrating with go-micro**:
+
+To use with the actual go-micro framework, add the dependency:
+
+```bash
+go get go-micro.dev/v5@latest
+```
+
+The handlers in `internal/delivery/micro/handler/` follow go-micro's signature pattern `func(ctx, req, rsp) error` and can be registered directly with go-micro's server.
 
 ### Building
 

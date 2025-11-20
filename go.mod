@@ -14,9 +14,7 @@ require (
 	github.com/samber/oops v1.19.4
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.21.0
-	go-micro.dev/v4 v4.10.2
 	golang.org/x/crypto v0.44.0
-	google.golang.org/protobuf v1.30.0
 )
 
 require (

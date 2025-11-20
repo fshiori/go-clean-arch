@@ -20,7 +20,8 @@ import (
 )
 
 // MicroServer represents the microservice server application
-// This is a lightweight JSON-RPC style microservice implementation
+// This implementation provides a simple JSON-RPC style HTTP server
+// that can be easily integrated with go-micro or other RPC frameworks
 type MicroServer struct {
 	db          *sqlx.DB
 	cfg         *config.Config
@@ -41,6 +42,8 @@ func NewMicroServer(db *sqlx.DB, cfg *config.Config, serviceName, version, addre
 }
 
 // Start starts the microservice server with graceful shutdown support
+// This uses a simple HTTP-based RPC approach that demonstrates the delivery layer pattern
+// For production use with go-micro framework, see: https://go-micro.dev
 func (m *MicroServer) Start() error {
 	logger.Info("Starting microservice...",
 		"service", m.serviceName,
@@ -65,12 +68,13 @@ func (m *MicroServer) Start() error {
 		json.NewEncoder(w).Encode(info)
 	})
 
-	// Register RPC-style endpoints for user service
-	mux.HandleFunc("/rpc/user/create", m.wrapHandler(userService.CreateUser))
-	mux.HandleFunc("/rpc/user/get", m.wrapHandler(userService.GetUser))
-	mux.HandleFunc("/rpc/user/list", m.wrapHandler(userService.ListUsers))
-	mux.HandleFunc("/rpc/user/update-password", m.wrapHandler(userService.UpdatePassword))
-	mux.HandleFunc("/rpc/user/delete", m.wrapHandler(userService.DeleteUser))
+	// Register JSON-RPC style endpoints for user service
+	// These endpoints follow go-micro handler signature conventions
+	mux.HandleFunc("/rpc/UserServiceSimple.CreateUser", m.wrapHandler(userService.CreateUser))
+	mux.HandleFunc("/rpc/UserServiceSimple.GetUser", m.wrapHandler(userService.GetUser))
+	mux.HandleFunc("/rpc/UserServiceSimple.ListUsers", m.wrapHandler(userService.ListUsers))
+	mux.HandleFunc("/rpc/UserServiceSimple.UpdatePassword", m.wrapHandler(userService.UpdatePassword))
+	mux.HandleFunc("/rpc/UserServiceSimple.DeleteUser", m.wrapHandler(userService.DeleteUser))
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -126,6 +130,7 @@ func (m *MicroServer) Start() error {
 }
 
 // wrapHandler wraps an RPC handler function to handle HTTP requests
+// This follows the go-micro handler signature pattern: func(ctx, req, rsp) error
 func (m *MicroServer) wrapHandler(fn interface{}) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
