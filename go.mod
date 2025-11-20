@@ -14,6 +14,7 @@ require (
 	github.com/samber/oops v1.19.4
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.21.0
+	go-micro.dev/v5 v5.3.0
 	golang.org/x/crypto v0.44.0
 )
 

@@ -254,36 +254,89 @@ The cron scheduler will start and run scheduled jobs.
 ./app micro --config configs/config.toml
 ```
 
-The microservice will start a JSON-RPC style server for inter-service communication.
+The microservice uses **go-micro v5** framework for RPC communication. It provides service discovery, load balancing, and pluggable transports out of the box.
 
-**Implementation Note**: The current implementation uses a simple HTTP-based RPC approach with handler signatures compatible with go-micro framework. This demonstrates the microservice delivery layer pattern while remaining framework-agnostic. For production deployments, you can easily integrate with [go-micro](https://go-micro.dev) or other RPC frameworks.
+**Key Features:**
+- ✅ Full go-micro v5 integration
+- ✅ Service registry and discovery
+- ✅ Pluggable transports (HTTP, gRPC, etc.)
+- ✅ Handler-based RPC with automatic serialization
+- ✅ Clean architecture maintained
 
-**Available RPC Endpoints:**
+**Available RPC Methods:**
 
-- `POST /rpc/UserServiceSimple.CreateUser` - Create a new user
-- `POST /rpc/UserServiceSimple.GetUser` - Get user by ID
-- `POST /rpc/UserServiceSimple.ListUsers` - List users (with pagination)
-- `POST /rpc/UserServiceSimple.UpdatePassword` - Update user password
-- `POST /rpc/UserServiceSimple.DeleteUser` - Delete user
-- `GET /info` - Service information
+The service exposes the following RPC methods via go-micro:
 
-**Example RPC call:**
+- `UserServiceSimple.CreateUser` - Create a new user
+- `UserServiceSimple.GetUser` - Get user by ID
+- `UserServiceSimple.ListUsers` - List users (with pagination)
+- `UserServiceSimple.UpdatePassword` - Update user password
+- `UserServiceSimple.DeleteUser` - Delete user
+
+**Calling the Microservice:**
+
+Using go-micro client:
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "go-micro.dev/v5"
+    "go-micro.dev/v5/client"
+)
+
+type CreateUserReq struct {
+    Email    string `json:"email"`
+    Password string `json:"password"`
+}
+
+type CreateUserRsp struct {
+    ID        int64  `json:"id"`
+    Email     string `json:"email"`
+    CreatedAt string `json:"created_at"`
+    UpdatedAt string `json:"updated_at"`
+}
+
+func main() {
+    service := micro.NewService()
+    service.Init()
+
+    req := &CreateUserReq{
+        Email:    "user@example.com",
+        Password: "secret123",
+    }
+    rsp := &CreateUserRsp{}
+
+    err := service.Client().Call(
+        context.Background(),
+        service.Client().NewRequest(
+            "go.micro.service.user",
+            "UserServiceSimple.CreateUser",
+            req,
+        ),
+        rsp,
+    )
+
+    if err != nil {
+        fmt.Println("Error:", err)
+        return
+    }
+
+    fmt.Printf("Created user: %+v\n", rsp)
+}
+```
+
+**Using HTTP transport:**
+
+go-micro v5 supports HTTP by default:
 
 ```bash
-curl -X POST http://localhost:8081/rpc/UserServiceSimple.CreateUser \
+curl -X POST http://localhost:8081/UserServiceSimple/CreateUser \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"secret123"}'
 ```
-
-**Integrating with go-micro**:
-
-To use with the actual go-micro framework, add the dependency:
-
-```bash
-go get go-micro.dev/v5@latest
-```
-
-The handlers in `internal/delivery/micro/handler/` follow go-micro's signature pattern `func(ctx, req, rsp) error` and can be registered directly with go-micro's server.
 
 ### Building
 

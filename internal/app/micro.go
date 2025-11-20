@@ -3,25 +3,21 @@ package app
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"go-clean-arch/internal/delivery/micro/handler"
 	"go-clean-arch/pkg/config"
 	"go-clean-arch/pkg/logger"
 
 	"github.com/jmoiron/sqlx"
+	"go-micro.dev/v5"
+	"go-micro.dev/v5/server"
 )
 
 // MicroServer represents the microservice server application
-// This implementation provides a simple JSON-RPC style HTTP server
-// that can be easily integrated with go-micro or other RPC frameworks
 type MicroServer struct {
 	db          *sqlx.DB
 	cfg         *config.Config
@@ -42,10 +38,8 @@ func NewMicroServer(db *sqlx.DB, cfg *config.Config, serviceName, version, addre
 }
 
 // Start starts the microservice server with graceful shutdown support
-// This uses a simple HTTP-based RPC approach that demonstrates the delivery layer pattern
-// For production use with go-micro framework, see: https://go-micro.dev
 func (m *MicroServer) Start() error {
-	logger.Info("Starting microservice...",
+	logger.Info("Starting go-micro microservice...",
 		"service", m.serviceName,
 		"version", m.version,
 		"address", m.address,
@@ -54,48 +48,39 @@ func (m *MicroServer) Start() error {
 	// Wire automatically injects all dependencies
 	userService := InitializeMicroService(m.db, m.cfg)
 
-	// Create HTTP mux for RPC-style endpoints
-	mux := http.NewServeMux()
+	// Create a new micro service
+	srv := micro.NewService(
+		micro.Name(m.serviceName),
+		micro.Version(m.version),
+		micro.Address(m.address),
+	)
 
-	// Register service info endpoint
-	mux.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
-		info := map[string]string{
-			"service": m.serviceName,
-			"version": m.version,
-			"status":  "running",
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
-	})
+	// Initialize service
+	srv.Init()
 
-	// Register JSON-RPC style endpoints for user service
-	// These endpoints follow go-micro handler signature conventions
-	mux.HandleFunc("/rpc/UserServiceSimple.CreateUser", m.wrapHandler(userService.CreateUser))
-	mux.HandleFunc("/rpc/UserServiceSimple.GetUser", m.wrapHandler(userService.GetUser))
-	mux.HandleFunc("/rpc/UserServiceSimple.ListUsers", m.wrapHandler(userService.ListUsers))
-	mux.HandleFunc("/rpc/UserServiceSimple.UpdatePassword", m.wrapHandler(userService.UpdatePassword))
-	mux.HandleFunc("/rpc/UserServiceSimple.DeleteUser", m.wrapHandler(userService.DeleteUser))
-
-	// Create HTTP server
-	srv := &http.Server{
-		Addr:    m.address,
-		Handler: mux,
+	// Register handler with the service
+	// The handler is registered with the service name "UserServiceSimple"
+	if err := server.RegisterHandler(srv.Server(), userService); err != nil {
+		return fmt.Errorf("failed to register handler: %w", err)
 	}
-
-	// Channel to listen for errors from server
-	serverErrors := make(chan error, 1)
-
-	// Start server in a goroutine (non-blocking)
-	go func() {
-		logger.Info("Microservice is ready to accept requests")
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serverErrors <- err
-		}
-	}()
 
 	// Create context that listens for interrupt signals
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
+
+	// Channel to listen for server errors
+	serverErrors := make(chan error, 1)
+
+	// Start server in a goroutine (non-blocking)
+	go func() {
+		logger.Info("Go-micro microservice is ready to accept requests",
+			"transport", "http",
+			"address", m.address,
+		)
+		if err := srv.Run(); err != nil {
+			serverErrors <- err
+		}
+	}()
 
 	// Block until we receive a signal or server error
 	select {
@@ -109,106 +94,12 @@ func (m *MicroServer) Start() error {
 
 		logger.Info("Shutdown signal received, starting graceful shutdown...")
 
-		// Create a deadline for graceful shutdown (30 seconds)
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		// Attempt graceful shutdown
-		if err := srv.Shutdown(shutdownCtx); err != nil {
-			logger.Error("Server forced to shutdown", "error", err)
-			return fmt.Errorf("server forced to shutdown: %w", err)
-		}
-
 		// Close database connection
 		if err := m.db.Close(); err != nil {
 			logger.Error("Error closing database connection", "error", err)
 		}
 
-		logger.Info("Microservice stopped gracefully")
+		logger.Info("Go-micro microservice stopped gracefully")
 		return nil
-	}
-}
-
-// wrapHandler wraps an RPC handler function to handle HTTP requests
-// This follows the go-micro handler signature pattern: func(ctx, req, rsp) error
-func (m *MicroServer) wrapHandler(fn interface{}) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-
-		// Handle different function signatures
-		switch f := fn.(type) {
-		case func(context.Context, *handler.CreateUserReq, *handler.CreateUserRsp) error:
-			var req handler.CreateUserReq
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			var rsp handler.CreateUserRsp
-			if err := f(r.Context(), &req, &rsp); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			json.NewEncoder(w).Encode(rsp)
-
-		case func(context.Context, *handler.GetUserReq, *handler.GetUserRsp) error:
-			var req handler.GetUserReq
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			var rsp handler.GetUserRsp
-			if err := f(r.Context(), &req, &rsp); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			json.NewEncoder(w).Encode(rsp)
-
-		case func(context.Context, *handler.ListUsersReq, *handler.ListUsersRsp) error:
-			var req handler.ListUsersReq
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			var rsp handler.ListUsersRsp
-			if err := f(r.Context(), &req, &rsp); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			json.NewEncoder(w).Encode(rsp)
-
-		case func(context.Context, *handler.UpdatePasswordReq, *handler.UpdatePasswordRsp) error:
-			var req handler.UpdatePasswordReq
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			var rsp handler.UpdatePasswordRsp
-			if err := f(r.Context(), &req, &rsp); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			json.NewEncoder(w).Encode(rsp)
-
-		case func(context.Context, *handler.DeleteUserReq, *handler.DeleteUserRsp) error:
-			var req handler.DeleteUserReq
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			var rsp handler.DeleteUserRsp
-			if err := f(r.Context(), &req, &rsp); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			json.NewEncoder(w).Encode(rsp)
-
-		default:
-			http.Error(w, "Unknown handler type", http.StatusInternalServerError)
-		}
 	}
 }
