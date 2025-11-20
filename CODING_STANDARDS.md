@@ -207,14 +207,18 @@ const maxRetries = 3 // Should be capitalized
 
 **Example**:
 ```go
-// ✅ Good: Rich domain entity
+// ✅ Good: Go-idiomatic domain entity with public fields
+// Domain entities use public fields for simplicity.
+// Validation and invariants are enforced through constructors and methods.
 type User struct {
-    id        int64
-    email     string
-    password  string
-    createdAt time.Time
+    ID           int64
+    Email        string
+    PasswordHash string
+    CreatedAt    time.Time
 }
 
+// NewUser is a factory function that ensures the entity is created in a valid state.
+// This is the Go-idiomatic way to handle validation without needing getters/setters.
 func NewUser(email, password string) (*User, error) {
     if err := validateEmail(email); err != nil {
         return nil, err
@@ -229,15 +233,21 @@ func NewUser(email, password string) (*User, error) {
     }
 
     return &User{
-        email:     email,
-        password:  hashedPassword,
-        createdAt: time.Now(),
+        Email:        email,
+        PasswordHash: hashedPassword,
+        CreatedAt:    time.Now(),
     }, nil
 }
 
+// ChangePassword is a method that maintains business invariants.
+// It ensures password changes follow business rules.
 func (u *User) ChangePassword(oldPassword, newPassword string) error {
     if !u.verifyPassword(oldPassword) {
         return ErrInvalidPassword
+    }
+
+    if err := validatePassword(newPassword); err != nil {
+        return err
     }
 
     hashedPassword, err := hashPassword(newPassword)
@@ -245,16 +255,29 @@ func (u *User) ChangePassword(oldPassword, newPassword string) error {
         return err
     }
 
-    u.password = hashedPassword
+    u.PasswordHash = hashedPassword
     return nil
 }
 
-// ❌ Bad: Anemic domain model with tags
+// ReconstructUser is used by the repository layer to rebuild entities from storage.
+// This separates creation logic (NewUser) from reconstruction logic.
+func ReconstructUser(id int64, email, passwordHash string, createdAt time.Time) *User {
+    return &User{
+        ID:           id,
+        Email:        email,
+        PasswordHash: passwordHash,
+        CreatedAt:    createdAt,
+    }
+}
+
+// ❌ Bad: Anemic domain model with infrastructure tags
 type User struct {
     ID       int64  `json:"id" gorm:"primaryKey"`
     Email    string `json:"email" gorm:"uniqueIndex"`
     Password string `json:"-" gorm:"column:password_hash"`
 }
+// This violates Clean Architecture because domain entities
+// should not know about infrastructure concerns (JSON, GORM).
 ```
 
 ### 2. Use Case Layer (`internal/usecase/`)
@@ -344,10 +367,10 @@ func (m *UserModel) ToDomain() *domain.User {
 
 func ToModel(user *domain.User) *UserModel {
     return &UserModel{
-        ID:           user.GetID(),
-        Email:        user.GetEmail(),
-        PasswordHash: user.GetPasswordHash(),
-        CreatedAt:    user.GetCreatedAt(),
+        ID:           user.ID,
+        Email:        user.Email,
+        PasswordHash: user.PasswordHash,
+        CreatedAt:    user.CreatedAt,
     }
 }
 
@@ -397,9 +420,9 @@ type UserResponse struct {
 
 func ToUserResponse(user *domain.User) *UserResponse {
     return &UserResponse{
-        ID:        user.GetID(),
-        Email:     user.GetEmail(),
-        CreatedAt: user.GetCreatedAt(),
+        ID:        user.ID,
+        Email:     user.Email,
+        CreatedAt: user.CreatedAt,
     }
 }
 
@@ -676,7 +699,7 @@ func TestNewUser(t *testing.T) {
             } else {
                 assert.NoError(t, err)
                 assert.NotNil(t, user)
-                assert.Equal(t, tt.email, user.GetEmail())
+                assert.Equal(t, tt.email, user.Email)
             }
         })
     }
@@ -697,10 +720,18 @@ mockery --dir=internal/usecase/port --all --output=internal/usecase/port/mocks
 
 ### Test Coverage Goals
 
-- **Domain layer**: 100% coverage
+- **Domain layer**: 90%+ coverage (focus on core business logic and methods with behavior; simple constructors and data holders can be exempted)
 - **Use case layer**: 90%+ coverage
 - **Repository layer**: 80%+ coverage (integration tests)
 - **Handler layer**: 70%+ coverage
+
+**Note**: While we strive for high coverage, 100% coverage is often impractical and provides diminishing returns. Focus testing efforts on:
+- Business logic and validation rules
+- State transitions and invariants
+- Error handling paths
+- Complex algorithms
+
+Simple getters, setters, and trivial constructors don't require exhaustive testing if they contain no logic.
 
 ```bash
 # Check coverage
@@ -799,7 +830,7 @@ func (i *UserInteractor) CreateUser(ctx context.Context, email string) (*domain.
     }
 
     logger.InfoContext(ctx, "User created successfully",
-        "user_id", user.GetID(),
+        "user_id", user.ID,
         "email", email,
     )
 
