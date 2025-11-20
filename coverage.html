@@ -1,0 +1,1147 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>domain: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">go-clean-arch/internal/domain/order.go (100.0%)</option>
+				
+				<option value="file1">go-clean-arch/internal/domain/user.go (85.7%)</option>
+				
+				<option value="file2">go-clean-arch/internal/usecase/order_interactor.go (0.0%)</option>
+				
+				<option value="file3">go-clean-arch/internal/usecase/port/mocks/order_repository_mock.go (0.0%)</option>
+				
+				<option value="file4">go-clean-arch/internal/usecase/port/mocks/payment_gateway_mock.go (0.0%)</option>
+				
+				<option value="file5">go-clean-arch/internal/usecase/port/mocks/user_repository_mock.go (0.0%)</option>
+				
+				<option value="file6">go-clean-arch/internal/usecase/user_interactor.go (91.7%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package domain
+
+import (
+        "time"
+
+        "github.com/samber/oops"
+)
+
+// OrderStatus represents the status of an order
+type OrderStatus string
+
+const (
+        OrderStatusPending   OrderStatus = "PENDING"
+        OrderStatusPaid      OrderStatus = "PAID"
+        OrderStatusShipped   OrderStatus = "SHIPPED"
+        OrderStatusCompleted OrderStatus = "COMPLETED"
+        OrderStatusCancelled OrderStatus = "CANCELLED"
+)
+
+// Order represents an order entity
+type Order struct {
+        ID          int64
+        UserID      int64
+        TotalAmount float64
+        Status      OrderStatus
+        Items       []OrderItem
+        CreatedAt   time.Time
+        UpdatedAt   time.Time
+}
+
+// OrderItem represents an item in an order
+type OrderItem struct {
+        ProductID int64
+        Quantity  int
+        Price     float64
+}
+
+// NewOrder creates a new order
+func NewOrder(userID int64, items []OrderItem) (*Order, error) <span class="cov8" title="1">{
+        // Validate user ID
+        if userID &lt;= 0 </span><span class="cov8" title="1">{
+                return nil, oops.
+                        Code(ErrCodeInvalidUserID).
+                        In("domain").
+                        With("user_id", userID).
+                        Hint("User ID must be a positive integer").
+                        Wrap(ErrInvalidUserID)
+        }</span>
+
+        // Validate items
+        <span class="cov8" title="1">if len(items) == 0 </span><span class="cov8" title="1">{
+                return nil, oops.
+                        Code(ErrCodeEmptyOrder).
+                        In("domain").
+                        With("user_id", userID).
+                        Hint("Order must have at least one item").
+                        Wrap(ErrEmptyOrder)
+        }</span>
+
+        // Validate each item
+        <span class="cov8" title="1">for i, item := range items </span><span class="cov8" title="1">{
+                if item.Quantity &lt;= 0 </span><span class="cov8" title="1">{
+                        return nil, oops.
+                                Code(ErrCodeInvalidQuantity).
+                                In("domain").
+                                With("item_index", i).
+                                With("product_id", item.ProductID).
+                                With("quantity", item.Quantity).
+                                Hint("Item quantity must be positive").
+                                Wrap(ErrInvalidQuantity)
+                }</span>
+                <span class="cov8" title="1">if item.Price &lt; 0 </span><span class="cov8" title="1">{
+                        return nil, oops.
+                                Code(ErrCodeInvalidQuantity).
+                                In("domain").
+                                With("item_index", i).
+                                With("product_id", item.ProductID).
+                                With("price", item.Price).
+                                Hint("Item price cannot be negative").
+                                Wrap(ErrInvalidQuantity)
+                }</span>
+        }
+
+        <span class="cov8" title="1">now := time.Now()
+        order := &amp;Order{
+                UserID:    userID,
+                Status:    OrderStatusPending,
+                Items:     items,
+                CreatedAt: now,
+                UpdatedAt: now,
+        }
+
+        // Calculate total amount
+        order.calculateTotal()
+
+        return order, nil</span>
+}
+
+// calculateTotal calculates the total amount of the order
+func (o *Order) calculateTotal() <span class="cov8" title="1">{
+        var total float64
+        for _, item := range o.Items </span><span class="cov8" title="1">{
+                total += item.Price * float64(item.Quantity)
+        }</span>
+        <span class="cov8" title="1">o.TotalAmount = total</span>
+}
+
+// MarkAsPaid marks the order as paid
+func (o *Order) MarkAsPaid() error <span class="cov8" title="1">{
+        if o.Status != OrderStatusPending </span><span class="cov8" title="1">{
+                return oops.
+                        Code(ErrCodeInvalidOrderStatus).
+                        In("domain").
+                        With("order_id", o.ID).
+                        With("current_status", o.Status).
+                        With("expected_status", OrderStatusPending).
+                        Hint("Can only mark pending orders as paid").
+                        Wrap(ErrInvalidOrderStatus)
+        }</span>
+        <span class="cov8" title="1">o.Status = OrderStatusPaid
+        o.UpdatedAt = time.Now()
+        return nil</span>
+}
+
+// Ship marks the order as shipped
+func (o *Order) Ship() error <span class="cov8" title="1">{
+        if o.Status != OrderStatusPaid </span><span class="cov8" title="1">{
+                return oops.
+                        Code(ErrCodeInvalidOrderStatus).
+                        In("domain").
+                        With("order_id", o.ID).
+                        With("current_status", o.Status).
+                        With("expected_status", OrderStatusPaid).
+                        Hint("Can only ship paid orders").
+                        Wrap(ErrInvalidOrderStatus)
+        }</span>
+        <span class="cov8" title="1">o.Status = OrderStatusShipped
+        o.UpdatedAt = time.Now()
+        return nil</span>
+}
+
+// Complete marks the order as completed
+func (o *Order) Complete() error <span class="cov8" title="1">{
+        if o.Status != OrderStatusShipped </span><span class="cov8" title="1">{
+                return oops.
+                        Code(ErrCodeInvalidOrderStatus).
+                        In("domain").
+                        With("order_id", o.ID).
+                        With("current_status", o.Status).
+                        With("expected_status", OrderStatusShipped).
+                        Hint("Can only complete shipped orders").
+                        Wrap(ErrInvalidOrderStatus)
+        }</span>
+        <span class="cov8" title="1">o.Status = OrderStatusCompleted
+        o.UpdatedAt = time.Now()
+        return nil</span>
+}
+
+// Cancel cancels the order
+func (o *Order) Cancel() error <span class="cov8" title="1">{
+        if o.Status == OrderStatusCompleted || o.Status == OrderStatusCancelled </span><span class="cov8" title="1">{
+                return oops.
+                        Code(ErrCodeInvalidOrderStatus).
+                        In("domain").
+                        With("order_id", o.ID).
+                        With("current_status", o.Status).
+                        Hint("Cannot cancel completed or already cancelled orders").
+                        Wrap(ErrInvalidOrderStatus)
+        }</span>
+        <span class="cov8" title="1">o.Status = OrderStatusCancelled
+        o.UpdatedAt = time.Now()
+        return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package domain
+
+import (
+        "time"
+
+        "github.com/samber/oops"
+        "golang.org/x/crypto/bcrypt"
+)
+
+// User represents a core business entity
+// It contains no tags (no json, no gorm) and is completely independent
+type User struct {
+        ID        int64
+        Email     string
+        password  string // private field, encapsulated
+        CreatedAt time.Time
+        UpdatedAt time.Time
+}
+
+// NewUser is a factory function to create a new User
+// This ensures that every User created is in a valid state
+func NewUser(email, password string) (*User, error) <span class="cov8" title="1">{
+        // Validation - Email
+        if email == "" </span><span class="cov8" title="1">{
+                return nil, oops.
+                        Code(ErrCodeInvalidEmail).
+                        In("domain").
+                        With("email", email).
+                        Hint("Email cannot be empty").
+                        Wrap(ErrInvalidEmail)
+        }</span>
+
+        // Validation - Password length
+        <span class="cov8" title="1">if len(password) &lt; 8 </span><span class="cov8" title="1">{
+                return nil, oops.
+                        Code(ErrCodePasswordTooShort).
+                        In("domain").
+                        With("password_length", len(password)).
+                        Hint("Password must be at least 8 characters").
+                        Wrap(ErrPasswordTooShort)
+        }</span>
+
+        // Hash password with bcrypt
+        <span class="cov8" title="1">hashedPassword, err := hashPassword(password)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">now := time.Now()
+        return &amp;User{
+                Email:     email,
+                password:  hashedPassword,
+                CreatedAt: now,
+                UpdatedAt: now,
+        }, nil</span>
+}
+
+// ReconstructUser creates a User from persisted data (for repository use only)
+// This method is used to restore User entities from the database without re-hashing the password
+// Parameters:
+//   - passwordHash: should already be a hashed value (bcrypt hash)
+func ReconstructUser(id int64, email, passwordHash string, createdAt, updatedAt time.Time) *User <span class="cov8" title="1">{
+        return &amp;User{
+                ID:        id,
+                Email:     email,
+                password:  passwordHash, // Already hashed
+                CreatedAt: createdAt,
+                UpdatedAt: updatedAt,
+        }
+}</span>
+
+// Password returns the hashed password
+func (u *User) Password() string <span class="cov0" title="0">{
+        return u.password
+}</span>
+
+// ChangePassword changes the user's password with validation
+func (u *User) ChangePassword(oldPassword, newPassword string) error <span class="cov8" title="1">{
+        // Verify old password
+        if !u.IsPasswordCorrect(oldPassword) </span><span class="cov8" title="1">{
+                return oops.
+                        Code(ErrCodeIncorrectPassword).
+                        In("domain").
+                        With("user_id", u.ID).
+                        Hint("Old password doesn't match").
+                        Wrap(ErrIncorrectPassword)
+        }</span>
+
+        // Validate new password length
+        <span class="cov8" title="1">if len(newPassword) &lt; 8 </span><span class="cov8" title="1">{
+                return oops.
+                        Code(ErrCodePasswordTooShort).
+                        In("domain").
+                        With("user_id", u.ID).
+                        With("password_length", len(newPassword)).
+                        Hint("New password must be at least 8 characters").
+                        Wrap(ErrPasswordTooShort)
+        }</span>
+
+        // Hash new password
+        <span class="cov8" title="1">hashedPassword, err := hashPassword(newPassword)
+        if err != nil </span><span class="cov0" title="0">{
+                return oops.
+                        In("domain").
+                        With("user_id", u.ID).
+                        Wrapf(err, "failed to hash new password")
+        }</span>
+
+        <span class="cov8" title="1">u.password = hashedPassword
+        u.UpdatedAt = time.Now()
+        return nil</span>
+}
+
+// IsPasswordCorrect checks if the provided password matches
+func (u *User) IsPasswordCorrect(password string) bool <span class="cov8" title="1">{
+        return comparePassword(u.password, password)
+}</span>
+
+// hashPassword uses bcrypt to hash the password
+func hashPassword(password string) (string, error) <span class="cov8" title="1">{
+        hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+        if err != nil </span><span class="cov0" title="0">{
+                return "", oops.
+                        Code(ErrCodePasswordHashFailed).
+                        In("domain").
+                        Hint("Failed to hash password with bcrypt").
+                        Wrapf(err, "bcrypt hash failed")
+        }</span>
+        <span class="cov8" title="1">return string(hash), nil</span>
+}
+
+// comparePassword compares a hashed password with a plain text password
+func comparePassword(hashedPassword, password string) bool <span class="cov8" title="1">{
+        err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
+        return err == nil
+}</span>
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package usecase
+
+import (
+        "context"
+        "errors"
+
+        "go-clean-arch/internal/domain"
+        "go-clean-arch/internal/usecase/port"
+
+        "github.com/samber/oops"
+)
+
+// OrderInteractor handles order-related business logic
+type OrderInteractor struct {
+        orderRepo      port.OrderRepository
+        userRepo       port.UserRepository
+        paymentGateway port.PaymentGateway
+}
+
+// NewOrderInteractor creates a new OrderInteractor
+func NewOrderInteractor(
+        orderRepo port.OrderRepository,
+        userRepo port.UserRepository,
+        paymentGateway port.PaymentGateway,
+) *OrderInteractor <span class="cov0" title="0">{
+        return &amp;OrderInteractor{
+                orderRepo:      orderRepo,
+                userRepo:       userRepo,
+                paymentGateway: paymentGateway,
+        }
+}</span>
+
+// CreateOrder creates a new order
+func (i *OrderInteractor) CreateOrder(ctx context.Context, userID int64, items []domain.OrderItem) (*domain.Order, error) <span class="cov0" title="0">{
+        // Verify user exists
+        _, err := i.userRepo.FindByID(ctx, userID)
+        if err != nil </span><span class="cov0" title="0">{
+                if errors.Is(err, domain.ErrUserNotFound) </span><span class="cov0" title="0">{
+                        return nil, oops.
+                                Code(domain.ErrCodeUserNotFound).
+                                In("order_usecase").
+                                Tags("order_creation", "validation").
+                                With("user_id", userID).
+                                Hint("User must exist before creating an order").
+                                Wrap(err)
+                }</span>
+
+                <span class="cov0" title="0">return nil, oops.
+                        Code(domain.ErrCodeUserFetchFailed).
+                        In("order_usecase").
+                        Tags("order_creation").
+                        With("user_id", userID).
+                        Wrapf(err, "failed to verify user existence")</span>
+        }
+
+        // Create order using domain factory function
+        <span class="cov0" title="0">order, err := domain.NewOrder(userID, items)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, oops.
+                        In("order_usecase").
+                        Tags("order_creation", "validation").
+                        With("user_id", userID).
+                        With("item_count", len(items)).
+                        Wrapf(err, "failed to create order entity")
+        }</span>
+
+        // Save order
+        <span class="cov0" title="0">if err := i.orderRepo.Save(ctx, order); err != nil </span><span class="cov0" title="0">{
+                return nil, oops.
+                        Code(domain.ErrCodeOrderSaveFailed).
+                        In("order_usecase").
+                        Tags("order_creation", "database").
+                        With("user_id", userID).
+                        Hint("Check database connection and constraints").
+                        Wrapf(err, "failed to save order to repository")
+        }</span>
+
+        <span class="cov0" title="0">return order, nil</span>
+}
+
+// Checkout processes payment for an order
+func (i *OrderInteractor) Checkout(ctx context.Context, orderID int64, paymentInfo *port.PaymentInfo) (*port.Transaction, error) <span class="cov0" title="0">{
+        // Retrieve order
+        order, err := i.orderRepo.FindByID(ctx, orderID)
+        if err != nil </span><span class="cov0" title="0">{
+                if errors.Is(err, domain.ErrOrderNotFound) </span><span class="cov0" title="0">{
+                        return nil, oops.
+                                Code(domain.ErrCodeOrderNotFound).
+                                In("order_usecase").
+                                Tags("checkout").
+                                With("order_id", orderID).
+                                Wrap(err)
+                }</span>
+
+                <span class="cov0" title="0">return nil, oops.
+                        Code(domain.ErrCodeOrderFetchFailed).
+                        In("order_usecase").
+                        Tags("checkout").
+                        With("order_id", orderID).
+                        Wrapf(err, "failed to fetch order")</span>
+        }
+
+        // Verify order is in pending status
+        <span class="cov0" title="0">if order.Status != domain.OrderStatusPending </span><span class="cov0" title="0">{
+                return nil, oops.
+                        Code(domain.ErrCodeInvalidOrderStatus).
+                        In("order_usecase").
+                        Tags("checkout", "validation").
+                        With("order_id", orderID).
+                        With("current_status", order.Status).
+                        With("expected_status", domain.OrderStatusPending).
+                        Hint("Can only checkout pending orders").
+                        Wrap(domain.ErrInvalidOrderStatus)
+        }</span>
+
+        // Process payment through gateway (abstracted)
+        <span class="cov0" title="0">transaction, err := i.paymentGateway.CreateTransaction(order, paymentInfo)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, oops.
+                        Code(domain.ErrCodePaymentFailed).
+                        In("order_usecase").
+                        Tags("checkout", "payment").
+                        With("order_id", orderID).
+                        With("amount", order.TotalAmount).
+                        Hint("Check payment gateway connection and payment info").
+                        Wrapf(err, "payment gateway transaction failed")
+        }</span>
+
+        // Check if payment was successful
+        <span class="cov0" title="0">if transaction.Status == port.TransactionStatusCompleted </span><span class="cov0" title="0">{
+                // Mark order as paid
+                if err := order.MarkAsPaid(); err != nil </span><span class="cov0" title="0">{
+                        return nil, oops.
+                                In("order_usecase").
+                                Tags("checkout", "status_update").
+                                With("order_id", orderID).
+                                Wrapf(err, "failed to mark order as paid")
+                }</span>
+
+                // Update order in repository
+                <span class="cov0" title="0">if err := i.orderRepo.Update(ctx, order); err != nil </span><span class="cov0" title="0">{
+                        return nil, oops.
+                                Code(domain.ErrCodeOrderUpdateFailed).
+                                In("order_usecase").
+                                Tags("checkout", "database").
+                                With("order_id", orderID).
+                                Hint("Order was paid but database update failed - manual intervention may be required").
+                                Wrapf(err, "failed to update order after payment")
+                }</span>
+        }
+
+        <span class="cov0" title="0">return transaction, nil</span>
+}
+
+// GetOrderByID retrieves an order by ID
+func (i *OrderInteractor) GetOrderByID(ctx context.Context, orderID int64) (*domain.Order, error) <span class="cov0" title="0">{
+        if orderID &lt;= 0 </span><span class="cov0" title="0">{
+                return nil, oops.
+                        Code(domain.ErrCodeInvalidUserID).
+                        In("order_usecase").
+                        With("order_id", orderID).
+                        Hint("Order ID must be a positive integer").
+                        Wrap(errors.New("invalid order ID"))
+        }</span>
+
+        <span class="cov0" title="0">order, err := i.orderRepo.FindByID(ctx, orderID)
+        if err != nil </span><span class="cov0" title="0">{
+                if errors.Is(err, domain.ErrOrderNotFound) </span><span class="cov0" title="0">{
+                        return nil, oops.
+                                Code(domain.ErrCodeOrderNotFound).
+                                In("order_usecase").
+                                With("order_id", orderID).
+                                Wrap(err)
+                }</span>
+
+                <span class="cov0" title="0">return nil, oops.
+                        Code(domain.ErrCodeOrderFetchFailed).
+                        In("order_usecase").
+                        With("order_id", orderID).
+                        Hint("Check database connection").
+                        Wrapf(err, "failed to fetch order")</span>
+        }
+
+        <span class="cov0" title="0">return order, nil</span>
+}
+
+// GetUserOrders retrieves all orders for a user
+func (i *OrderInteractor) GetUserOrders(ctx context.Context, userID int64) ([]*domain.Order, error) <span class="cov0" title="0">{
+        if userID &lt;= 0 </span><span class="cov0" title="0">{
+                return nil, oops.
+                        Code(domain.ErrCodeInvalidUserID).
+                        In("order_usecase").
+                        With("user_id", userID).
+                        Wrap(domain.ErrInvalidUserID)
+        }</span>
+
+        <span class="cov0" title="0">orders, err := i.orderRepo.FindByUserID(ctx, userID)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, oops.
+                        Code(domain.ErrCodeOrderFetchFailed).
+                        In("order_usecase").
+                        Tags("listing").
+                        With("user_id", userID).
+                        Hint("Check database connection").
+                        Wrapf(err, "failed to fetch user orders")
+        }</span>
+
+        <span class="cov0" title="0">return orders, nil</span>
+}
+
+// ShipOrder ships an order
+func (i *OrderInteractor) ShipOrder(ctx context.Context, orderID int64) error <span class="cov0" title="0">{
+        order, err := i.orderRepo.FindByID(ctx, orderID)
+        if err != nil </span><span class="cov0" title="0">{
+                if errors.Is(err, domain.ErrOrderNotFound) </span><span class="cov0" title="0">{
+                        return oops.
+                                Code(domain.ErrCodeOrderNotFound).
+                                In("order_usecase").
+                                Tags("shipping").
+                                With("order_id", orderID).
+                                Wrap(err)
+                }</span>
+
+                <span class="cov0" title="0">return oops.
+                        Code(domain.ErrCodeOrderFetchFailed).
+                        In("order_usecase").
+                        Tags("shipping").
+                        With("order_id", orderID).
+                        Wrapf(err, "failed to fetch order")</span>
+        }
+
+        // Use domain method to ship (includes business rules validation)
+        <span class="cov0" title="0">if err := order.Ship(); err != nil </span><span class="cov0" title="0">{
+                return oops.
+                        In("order_usecase").
+                        Tags("shipping", "validation").
+                        With("order_id", orderID).
+                        Wrapf(err, "failed to ship order")
+        }</span>
+
+        // Update in repository
+        <span class="cov0" title="0">if err := i.orderRepo.Update(ctx, order); err != nil </span><span class="cov0" title="0">{
+                return oops.
+                        Code(domain.ErrCodeOrderUpdateFailed).
+                        In("order_usecase").
+                        Tags("shipping", "database").
+                        With("order_id", orderID).
+                        Wrapf(err, "failed to update order after shipping")
+        }</span>
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+// CompleteOrder marks an order as completed
+func (i *OrderInteractor) CompleteOrder(ctx context.Context, orderID int64) error <span class="cov0" title="0">{
+        order, err := i.orderRepo.FindByID(ctx, orderID)
+        if err != nil </span><span class="cov0" title="0">{
+                if errors.Is(err, domain.ErrOrderNotFound) </span><span class="cov0" title="0">{
+                        return oops.
+                                Code(domain.ErrCodeOrderNotFound).
+                                In("order_usecase").
+                                Tags("completion").
+                                With("order_id", orderID).
+                                Wrap(err)
+                }</span>
+
+                <span class="cov0" title="0">return oops.
+                        Code(domain.ErrCodeOrderFetchFailed).
+                        In("order_usecase").
+                        Tags("completion").
+                        With("order_id", orderID).
+                        Wrapf(err, "failed to fetch order")</span>
+        }
+
+        // Use domain method to complete
+        <span class="cov0" title="0">if err := order.Complete(); err != nil </span><span class="cov0" title="0">{
+                return oops.
+                        In("order_usecase").
+                        Tags("completion", "validation").
+                        With("order_id", orderID).
+                        Wrapf(err, "failed to complete order")
+        }</span>
+
+        // Update in repository
+        <span class="cov0" title="0">if err := i.orderRepo.Update(ctx, order); err != nil </span><span class="cov0" title="0">{
+                return oops.
+                        Code(domain.ErrCodeOrderUpdateFailed).
+                        In("order_usecase").
+                        Tags("completion", "database").
+                        With("order_id", orderID).
+                        Wrapf(err, "failed to update order after completion")
+        }</span>
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+// CancelOrder cancels an order
+func (i *OrderInteractor) CancelOrder(ctx context.Context, orderID int64) error <span class="cov0" title="0">{
+        order, err := i.orderRepo.FindByID(ctx, orderID)
+        if err != nil </span><span class="cov0" title="0">{
+                if errors.Is(err, domain.ErrOrderNotFound) </span><span class="cov0" title="0">{
+                        return oops.
+                                Code(domain.ErrCodeOrderNotFound).
+                                In("order_usecase").
+                                Tags("cancellation").
+                                With("order_id", orderID).
+                                Wrap(err)
+                }</span>
+
+                <span class="cov0" title="0">return oops.
+                        Code(domain.ErrCodeOrderFetchFailed).
+                        In("order_usecase").
+                        Tags("cancellation").
+                        With("order_id", orderID).
+                        Wrapf(err, "failed to fetch order")</span>
+        }
+
+        // Use domain method to cancel
+        <span class="cov0" title="0">if err := order.Cancel(); err != nil </span><span class="cov0" title="0">{
+                return oops.
+                        In("order_usecase").
+                        Tags("cancellation", "validation").
+                        With("order_id", orderID).
+                        Wrapf(err, "failed to cancel order")
+        }</span>
+
+        // Update in repository
+        <span class="cov0" title="0">if err := i.orderRepo.Update(ctx, order); err != nil </span><span class="cov0" title="0">{
+                return oops.
+                        Code(domain.ErrCodeOrderUpdateFailed).
+                        In("order_usecase").
+                        Tags("cancellation", "database").
+                        With("order_id", orderID).
+                        Wrapf(err, "failed to update order after cancellation")
+        }</span>
+
+        <span class="cov0" title="0">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package mocks
+
+import (
+        "context"
+
+        "go-clean-arch/internal/domain"
+        "go-clean-arch/internal/usecase/port"
+
+        "github.com/stretchr/testify/mock"
+)
+
+// MockOrderRepository is a mock implementation of port.OrderRepository
+type MockOrderRepository struct {
+        mock.Mock
+}
+
+// Ensure MockOrderRepository implements port.OrderRepository
+var _ port.OrderRepository = (*MockOrderRepository)(nil)
+
+// FindByID mocks the FindByID method
+func (m *MockOrderRepository) FindByID(ctx context.Context, id int64) (*domain.Order, error) <span class="cov0" title="0">{
+        args := m.Called(ctx, id)
+        if args.Get(0) == nil </span><span class="cov0" title="0">{
+                return nil, args.Error(1)
+        }</span>
+        <span class="cov0" title="0">return args.Get(0).(*domain.Order), args.Error(1)</span>
+}
+
+// FindByUserID mocks the FindByUserID method
+func (m *MockOrderRepository) FindByUserID(ctx context.Context, userID int64) ([]*domain.Order, error) <span class="cov0" title="0">{
+        args := m.Called(ctx, userID)
+        if args.Get(0) == nil </span><span class="cov0" title="0">{
+                return nil, args.Error(1)
+        }</span>
+        <span class="cov0" title="0">return args.Get(0).([]*domain.Order), args.Error(1)</span>
+}
+
+// Save mocks the Save method
+func (m *MockOrderRepository) Save(ctx context.Context, order *domain.Order) error <span class="cov0" title="0">{
+        args := m.Called(ctx, order)
+        return args.Error(0)
+}</span>
+
+// Update mocks the Update method
+func (m *MockOrderRepository) Update(ctx context.Context, order *domain.Order) error <span class="cov0" title="0">{
+        args := m.Called(ctx, order)
+        return args.Error(0)
+}</span>
+
+// UpdateStatus mocks the UpdateStatus method
+func (m *MockOrderRepository) UpdateStatus(ctx context.Context, orderID int64, status domain.OrderStatus) error <span class="cov0" title="0">{
+        args := m.Called(ctx, orderID, status)
+        return args.Error(0)
+}</span>
+
+// List mocks the List method
+func (m *MockOrderRepository) List(ctx context.Context, offset, limit int) ([]*domain.Order, error) <span class="cov0" title="0">{
+        args := m.Called(ctx, offset, limit)
+        if args.Get(0) == nil </span><span class="cov0" title="0">{
+                return nil, args.Error(1)
+        }</span>
+        <span class="cov0" title="0">return args.Get(0).([]*domain.Order), args.Error(1)</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package mocks
+
+import (
+        "go-clean-arch/internal/domain"
+        "go-clean-arch/internal/usecase/port"
+
+        "github.com/stretchr/testify/mock"
+)
+
+// MockPaymentGateway is a mock implementation of port.PaymentGateway
+type MockPaymentGateway struct {
+        mock.Mock
+}
+
+// Ensure MockPaymentGateway implements port.PaymentGateway
+var _ port.PaymentGateway = (*MockPaymentGateway)(nil)
+
+// CreateTransaction mocks the CreateTransaction method
+func (m *MockPaymentGateway) CreateTransaction(order *domain.Order, paymentInfo *port.PaymentInfo) (*port.Transaction, error) <span class="cov0" title="0">{
+        args := m.Called(order, paymentInfo)
+        if args.Get(0) == nil </span><span class="cov0" title="0">{
+                return nil, args.Error(1)
+        }</span>
+        <span class="cov0" title="0">return args.Get(0).(*port.Transaction), args.Error(1)</span>
+}
+
+// GetTransactionStatus mocks the GetTransactionStatus method
+func (m *MockPaymentGateway) GetTransactionStatus(transactionID string) (port.TransactionStatus, error) <span class="cov0" title="0">{
+        args := m.Called(transactionID)
+        return args.Get(0).(port.TransactionStatus), args.Error(1)
+}</span>
+
+// RefundTransaction mocks the RefundTransaction method
+func (m *MockPaymentGateway) RefundTransaction(transactionID string, amount float64) error <span class="cov0" title="0">{
+        args := m.Called(transactionID, amount)
+        return args.Error(0)
+}</span>
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package mocks
+
+import (
+        "context"
+
+        "go-clean-arch/internal/domain"
+        "go-clean-arch/internal/usecase/port"
+
+        "github.com/stretchr/testify/mock"
+)
+
+// MockUserRepository is a mock implementation of port.UserRepository
+type MockUserRepository struct {
+        mock.Mock
+}
+
+// Ensure MockUserRepository implements port.UserRepository
+var _ port.UserRepository = (*MockUserRepository)(nil)
+
+// FindByID mocks the FindByID method
+func (m *MockUserRepository) FindByID(ctx context.Context, id int64) (*domain.User, error) <span class="cov0" title="0">{
+        args := m.Called(ctx, id)
+        if args.Get(0) == nil </span><span class="cov0" title="0">{
+                return nil, args.Error(1)
+        }</span>
+        <span class="cov0" title="0">return args.Get(0).(*domain.User), args.Error(1)</span>
+}
+
+// FindByEmail mocks the FindByEmail method
+func (m *MockUserRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) <span class="cov0" title="0">{
+        args := m.Called(ctx, email)
+        if args.Get(0) == nil </span><span class="cov0" title="0">{
+                return nil, args.Error(1)
+        }</span>
+        <span class="cov0" title="0">return args.Get(0).(*domain.User), args.Error(1)</span>
+}
+
+// Save mocks the Save method
+func (m *MockUserRepository) Save(ctx context.Context, user *domain.User) error <span class="cov0" title="0">{
+        args := m.Called(ctx, user)
+        return args.Error(0)
+}</span>
+
+// Update mocks the Update method
+func (m *MockUserRepository) Update(ctx context.Context, user *domain.User) error <span class="cov0" title="0">{
+        args := m.Called(ctx, user)
+        return args.Error(0)
+}</span>
+
+// Delete mocks the Delete method
+func (m *MockUserRepository) Delete(ctx context.Context, id int64) error <span class="cov0" title="0">{
+        args := m.Called(ctx, id)
+        return args.Error(0)
+}</span>
+
+// List mocks the List method
+func (m *MockUserRepository) List(ctx context.Context, offset, limit int) ([]*domain.User, error) <span class="cov0" title="0">{
+        args := m.Called(ctx, offset, limit)
+        if args.Get(0) == nil </span><span class="cov0" title="0">{
+                return nil, args.Error(1)
+        }</span>
+        <span class="cov0" title="0">return args.Get(0).([]*domain.User), args.Error(1)</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package usecase
+
+import (
+        "context"
+        "errors"
+
+        "go-clean-arch/internal/domain"
+        "go-clean-arch/internal/usecase/port"
+
+        "github.com/samber/oops"
+)
+
+// UserInteractor handles user-related business logic
+type UserInteractor struct {
+        userRepo port.UserRepository
+}
+
+// NewUserInteractor creates a new UserInteractor
+func NewUserInteractor(userRepo port.UserRepository) *UserInteractor <span class="cov8" title="1">{
+        return &amp;UserInteractor{
+                userRepo: userRepo,
+        }
+}</span>
+
+// CreateUser creates a new user
+func (i *UserInteractor) CreateUser(ctx context.Context, email, password string) (*domain.User, error) <span class="cov8" title="1">{
+        // Check if email already exists
+        existingUser, err := i.userRepo.FindByEmail(ctx, email)
+        if err == nil &amp;&amp; existingUser != nil </span><span class="cov8" title="1">{
+                return nil, oops.
+                        Code(domain.ErrCodeEmailAlreadyExists).
+                        In("user_usecase").
+                        Tags("registration", "validation").
+                        With("email", email).
+                        Hint("Try using a different email address").
+                        Wrap(domain.ErrEmailAlreadyExists)
+        }</span>
+
+        // Create new user using domain factory function
+        <span class="cov8" title="1">user, err := domain.NewUser(email, password)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, oops.
+                        In("user_usecase").
+                        Tags("registration", "validation").
+                        With("email", email).
+                        Wrapf(err, "failed to create user entity")
+        }</span>
+
+        // Save to repository
+        <span class="cov8" title="1">if err := i.userRepo.Save(ctx, user); err != nil </span><span class="cov8" title="1">{
+                return nil, oops.
+                        Code(domain.ErrCodeUserSaveFailed).
+                        In("user_usecase").
+                        Tags("registration", "database").
+                        With("email", email).
+                        Hint("Check database connection and constraints").
+                        Wrapf(err, "failed to save user to repository")
+        }</span>
+
+        <span class="cov8" title="1">return user, nil</span>
+}
+
+// GetUserByID retrieves a user by ID
+func (i *UserInteractor) GetUserByID(ctx context.Context, id int64) (*domain.User, error) <span class="cov8" title="1">{
+        if id &lt;= 0 </span><span class="cov8" title="1">{
+                return nil, oops.
+                        Code(domain.ErrCodeInvalidUserID).
+                        In("user_usecase").
+                        With("user_id", id).
+                        Hint("User ID must be a positive integer").
+                        Wrap(domain.ErrInvalidUserID)
+        }</span>
+
+        <span class="cov8" title="1">user, err := i.userRepo.FindByID(ctx, id)
+        if err != nil </span><span class="cov8" title="1">{
+                // If it's a "not found" error, use domain error code
+                if errors.Is(err, domain.ErrUserNotFound) </span><span class="cov8" title="1">{
+                        return nil, oops.
+                                Code(domain.ErrCodeUserNotFound).
+                                In("user_usecase").
+                                With("user_id", id).
+                                Wrap(err)
+                }</span>
+
+                // Other database errors
+                <span class="cov0" title="0">return nil, oops.
+                        Code(domain.ErrCodeUserFetchFailed).
+                        In("user_usecase").
+                        With("user_id", id).
+                        Hint("Check database connection").
+                        Wrapf(err, "failed to fetch user from repository")</span>
+        }
+
+        <span class="cov8" title="1">return user, nil</span>
+}
+
+// GetUserByEmail retrieves a user by email
+func (i *UserInteractor) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) <span class="cov8" title="1">{
+        if email == "" </span><span class="cov8" title="1">{
+                return nil, oops.
+                        Code(domain.ErrCodeInvalidEmail).
+                        In("user_usecase").
+                        With("email", email).
+                        Wrap(domain.ErrInvalidEmail)
+        }</span>
+
+        <span class="cov8" title="1">user, err := i.userRepo.FindByEmail(ctx, email)
+        if err != nil </span><span class="cov8" title="1">{
+                // If it's a "not found" error, use domain error code
+                if errors.Is(err, domain.ErrUserNotFound) </span><span class="cov8" title="1">{
+                        return nil, oops.
+                                Code(domain.ErrCodeUserNotFound).
+                                In("user_usecase").
+                                With("email", email).
+                                Wrap(err)
+                }</span>
+
+                // Other database errors
+                <span class="cov0" title="0">return nil, oops.
+                        Code(domain.ErrCodeUserFetchFailed).
+                        In("user_usecase").
+                        With("email", email).
+                        Hint("Check database connection").
+                        Wrapf(err, "failed to fetch user from repository")</span>
+        }
+
+        <span class="cov8" title="1">return user, nil</span>
+}
+
+// UpdateUserPassword updates a user's password
+func (i *UserInteractor) UpdateUserPassword(ctx context.Context, userID int64, oldPassword, newPassword string) error <span class="cov8" title="1">{
+        // Retrieve user
+        user, err := i.GetUserByID(ctx, userID)
+        if err != nil </span><span class="cov8" title="1">{
+                return oops.
+                        In("user_usecase").
+                        Tags("password_update").
+                        Wrapf(err, "failed to retrieve user for password update")
+        }</span>
+
+        // Use domain method to change password (includes validation)
+        <span class="cov8" title="1">if err := user.ChangePassword(oldPassword, newPassword); err != nil </span><span class="cov8" title="1">{
+                return oops.
+                        In("user_usecase").
+                        Tags("password_update", "validation").
+                        With("user_id", userID).
+                        Wrapf(err, "failed to change password")
+        }</span>
+
+        // Update in repository
+        <span class="cov8" title="1">if err := i.userRepo.Update(ctx, user); err != nil </span><span class="cov0" title="0">{
+                return oops.
+                        Code(domain.ErrCodeUserUpdateFailed).
+                        In("user_usecase").
+                        Tags("password_update", "database").
+                        With("user_id", userID).
+                        Hint("Check database connection").
+                        Wrapf(err, "failed to update user in repository")
+        }</span>
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+// ListUsers retrieves a list of users with pagination
+func (i *UserInteractor) ListUsers(ctx context.Context, page, pageSize int) ([]*domain.User, error) <span class="cov8" title="1">{
+        if page &lt; 1 </span><span class="cov8" title="1">{
+                page = 1
+        }</span>
+        <span class="cov8" title="1">if pageSize &lt; 1 || pageSize &gt; 100 </span><span class="cov8" title="1">{
+                pageSize = 10
+        }</span>
+
+        <span class="cov8" title="1">offset := (page - 1) * pageSize
+        users, err := i.userRepo.List(ctx, offset, pageSize)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, oops.
+                        Code(domain.ErrCodeUserListFailed).
+                        In("user_usecase").
+                        Tags("listing").
+                        With("page", page).
+                        With("page_size", pageSize).
+                        Hint("Check database connection").
+                        Wrapf(err, "failed to list users")
+        }</span>
+
+        <span class="cov8" title="1">return users, nil</span>
+}
+
+// DeleteUser deletes a user
+func (i *UserInteractor) DeleteUser(ctx context.Context, id int64) error <span class="cov8" title="1">{
+        if id &lt;= 0 </span><span class="cov8" title="1">{
+                return oops.
+                        Code(domain.ErrCodeInvalidUserID).
+                        In("user_usecase").
+                        With("user_id", id).
+                        Wrap(domain.ErrInvalidUserID)
+        }</span>
+
+        <span class="cov8" title="1">if err := i.userRepo.Delete(ctx, id); err != nil </span><span class="cov8" title="1">{
+                return oops.
+                        Code(domain.ErrCodeUserDeleteFailed).
+                        In("user_usecase").
+                        Tags("deletion").
+                        With("user_id", id).
+                        Hint("Check if user exists and database connection").
+                        Wrapf(err, "failed to delete user")
+        }</span>
+
+        <span class="cov8" title="1">return nil</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
