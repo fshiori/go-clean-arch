@@ -2,6 +2,50 @@
 
 A production-ready Go application implementing Clean Architecture principles with support for multiple runtime modes (API, Worker, Cron).
 
+## ✨ Highlights
+
+- ✅ **Twelve-Factor App Compliant** (12/12 factors)
+- ✅ **Clean Architecture** with clear separation of concerns
+- ✅ **Multiple Runtime Modes**: API, Worker, Cron from single codebase
+- ✅ **Graceful Shutdown**: Proper signal handling for zero-downtime deployments
+- ✅ **Environment-First Config**: Runs with only environment variables (no config files required)
+- ✅ **Database Migrations**: Built-in migration commands (Factor XII compliant)
+- ✅ **Production Ready**: Docker, Kubernetes compatible with best practices
+
+## Quick Start
+
+### Environment-Only Deployment (Twelve-Factor)
+
+```bash
+# Set configuration via environment variables
+export APP_SERVER_PORT=8080
+export APP_DATABASE_HOST=localhost
+export APP_DATABASE_USER=postgres
+export APP_DATABASE_PASSWORD=secret
+
+# Run migrations
+./app migrate up
+
+# Start API server (no config file needed!)
+./app api
+```
+
+### Traditional Deployment (with config file)
+
+```bash
+# Copy example config
+cp configs/config.example.toml configs/config.toml
+
+# Edit configuration
+vim configs/config.toml
+
+# Run migrations
+./app migrate up
+
+# Start server
+./app api --config=configs/config.toml
+```
+
 ## Architecture Overview
 
 This project follows Clean Architecture and Standard Go Project Layout principles:
@@ -113,12 +157,60 @@ go mod download
 
 ### Configuration
 
-Copy the example config and modify as needed:
+**Option 1: Environment Variables (Recommended for Production)**
 
 ```bash
-cp configs/config.yaml configs/config.local.yaml
-# Edit configs/config.local.yaml with your settings
+# Set all configuration via environment variables
+export APP_SERVER_PORT=8080
+export APP_DATABASE_HOST=localhost
+export APP_DATABASE_PORT=5432
+export APP_DATABASE_USER=postgres
+export APP_DATABASE_PASSWORD=secret
+export APP_DATABASE_DBNAME=go_clean_arch
+export APP_LOGGER_LEVEL=info
+export APP_LOGGER_FORMAT=json
+
+# No config file needed!
+./app api
 ```
+
+**Option 2: Config File (For Local Development)**
+
+```bash
+cp configs/config.example.toml configs/config.toml
+# Edit configs/config.toml with your settings
+./app api --config=configs/config.toml
+```
+
+**Why Environment Variables?**
+
+This application follows [Twelve-Factor App](https://12factor.net/) methodology:
+- ✅ Same Docker image for dev/staging/prod
+- ✅ No secrets in config files
+- ✅ Easy Kubernetes/Docker deployment
+- ✅ Environment-specific configuration
+
+See [docs/TWELVE_FACTOR_COMPLIANCE.md](docs/TWELVE_FACTOR_COMPLIANCE.md) for details.
+
+### Database Migrations
+
+Run migrations before starting the application:
+
+```bash
+# Check migration status
+./app migrate status
+
+# Apply all pending migrations
+./app migrate up
+
+# Rollback last migration
+./app migrate down
+
+# Create new migration
+./app migrate create "add_users_index"
+```
+
+**Note**: Auto-migrate is disabled by default. Use explicit migration commands for production safety.
 
 ### Running Different Modes
 

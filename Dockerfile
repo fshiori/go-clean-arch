@@ -34,8 +34,16 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /app/bin/app .
 
-# Copy config files
-COPY --from=builder /app/configs ./configs
+# Note: Config files are NOT bundled into the image
+# Following Twelve-Factor App methodology (Factor III - Config):
+# - All configuration should come from environment variables
+# - This makes the image environment-agnostic
+# - Same image can be deployed to dev, staging, and production
+#
+# Example usage:
+#   docker run -e APP_DATABASE_HOST=prod-db \
+#              -e APP_DATABASE_PASSWORD=secret \
+#              go-clean-arch:latest --mode=api
 
 # Change ownership
 RUN chown -R appuser:appgroup /app

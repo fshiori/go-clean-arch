@@ -46,14 +46,26 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	// Global flags
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "configs/config.toml", "config file path")
+	// Config file is OPTIONAL - supports Twelve-Factor App (Factor III)
+	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file path (optional, defaults to env vars)")
 }
 
-// initConfig reads in config file and initializes logger
+// initConfig reads in config file and initializes logger.
+// Config files are optional - application can run with only environment variables.
+// This follows Twelve-Factor App methodology (Factor III - Config).
 func initConfig() {
 	var err error
 
-	// Load configuration
+	// If no config file specified, check if default exists
+	if cfgFile == "" {
+		// Try default path if it exists
+		if _, err := os.Stat("configs/config.toml"); err == nil {
+			cfgFile = "configs/config.toml"
+		}
+		// If default doesn't exist, that's OK - use env vars only
+	}
+
+	// Load configuration (file is optional, env vars will be used)
 	cfg, err = config.Load(cfgFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
@@ -65,8 +77,6 @@ func initConfig() {
 		Level:  cfg.Logger.Level,
 		Format: cfg.Logger.Format,
 	})
-
-	logger.Info("Configuration loaded", "file", cfgFile)
 }
 
 // getDB initializes and returns a database connection.
