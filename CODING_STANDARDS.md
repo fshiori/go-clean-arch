@@ -1,22 +1,26 @@
 # Go Clean Architecture Coding Standards
 
-**Version**: 1.0
-**Last Updated**: 2025-11-15
+**Version**: 1.1
+**Last Updated**: 2025-11-20
 
 ## Table of Contents
 
 1. [Introduction](#introduction)
-2. [Project Structure](#project-structure)
-3. [Naming Conventions](#naming-conventions)
-4. [Clean Architecture Layers](#clean-architecture-layers)
-5. [Code Style Guidelines](#code-style-guidelines)
-6. [Error Handling](#error-handling)
-7. [Testing Standards](#testing-standards)
-8. [Dependency Injection](#dependency-injection)
-9. [Logging Standards](#logging-standards)
-10. [API Design](#api-design)
-11. [Database Standards](#database-standards)
-12. [Git Workflow](#git-workflow)
+2. [Twelve-Factor App Compliance](#twelve-factor-app-compliance)
+3. [Project Structure](#project-structure)
+4. [Naming Conventions](#naming-conventions)
+5. [Clean Architecture Layers](#clean-architecture-layers)
+6. [Code Style Guidelines](#code-style-guidelines)
+7. [Error Handling](#error-handling)
+8. [Testing Standards](#testing-standards)
+9. [Dependency Injection](#dependency-injection)
+10. [Logging Standards](#logging-standards)
+11. [API Design](#api-design)
+12. [Protobuf and gRPC Standards](#protobuf-and-grpc-standards)
+13. [Configuration Management](#configuration-management)
+14. [Database Standards](#database-standards)
+15. [Application Lifecycle](#application-lifecycle)
+16. [Git Workflow](#git-workflow)
 
 ---
 
@@ -31,6 +35,117 @@ This document defines coding standards for Go projects implementing Clean Archit
 3. **Interface Segregation**: Interfaces defined where they're needed
 4. **Single Responsibility**: Each component has one clear purpose
 5. **Testability**: Every layer can be tested in isolation
+
+---
+
+## Twelve-Factor App Compliance
+
+This project follows the **[Twelve-Factor App](https://12factor.net/)** methodology for building modern, cloud-native applications.
+
+### Why Twelve-Factor?
+
+The Twelve-Factor methodology provides best practices for:
+- ✅ **Portability**: Deploy anywhere (cloud, on-premise, containers)
+- ✅ **Scalability**: Scale horizontally without code changes
+- ✅ **Maintainability**: Clear separation of concerns
+- ✅ **Reliability**: Graceful startup and shutdown
+
+### Key Compliance Areas
+
+| Factor | Implementation | Priority |
+|--------|----------------|----------|
+| **I. Codebase** | Single Git repo, multiple deployments | ✅ Compliant |
+| **II. Dependencies** | Go modules (`go.mod`/`go.sum`) | ✅ Compliant |
+| **III. Config** | Environment variables (`APP_*` prefix) | ✅ Compliant |
+| **IV. Backing Services** | Database, RabbitMQ as attached resources | ✅ Compliant |
+| **V. Build/Release/Run** | Docker multi-stage builds | ✅ Compliant |
+| **VI. Processes** | Stateless processes | ✅ Compliant |
+| **VII. Port Binding** | Self-contained HTTP server | ✅ Compliant |
+| **VIII. Concurrency** | Multiple process types (api, worker, cron) | ✅ Compliant |
+| **IX. Disposability** | Graceful shutdown with signal handling | ✅ **REQUIRED** |
+| **X. Dev/Prod Parity** | Docker Compose for local dev | ✅ Compliant |
+| **XI. Logs** | Structured logging to stdout | ✅ Compliant |
+| **XII. Admin Processes** | `migrate` command for one-off tasks | ✅ Compliant |
+
+**Overall Compliance**: **12/12 factors** ✅
+
+For detailed assessment, see [TWELVE_FACTOR_ASSESSMENT.md](../TWELVE_FACTOR_ASSESSMENT.md).
+
+### Critical Requirements
+
+**1. Factor III - Config** (Environment Variables)
+```bash
+# ✅ DO: Support environment-only deployment
+export APP_DATABASE_HOST=prod-db.example.com
+export APP_DATABASE_PASSWORD=$SECRET
+./app api
+
+# ❌ DON'T: Require config files in production
+```
+
+**2. Factor IX - Disposability** (Graceful Shutdown)
+```go
+// ✅ DO: Implement signal handling
+signal.Notify(shutdown, syscall.SIGTERM, syscall.SIGINT)
+
+// ❌ DON'T: Block indefinitely
+router.Run(":8080")  // No cleanup on shutdown
+```
+
+**3. Factor XI - Logs** (Treat logs as event streams)
+```go
+// ✅ DO: Log to stdout with structured format
+logger.InfoContext(ctx, "User created", "user_id", id)
+
+// ❌ DON'T: Write to log files
+f, _ := os.OpenFile("app.log", os.O_APPEND, 0644)
+```
+
+### Development Workflow
+
+```bash
+# Local development (Factor X - Dev/Prod Parity)
+docker-compose up  # Same services as production
+
+# Environment-based config (Factor III)
+export APP_DATABASE_HOST=localhost
+export APP_DATABASE_PASSWORD=devpass
+
+# Multiple process types (Factor VIII)
+./app api      # HTTP server
+./app worker   # Background jobs
+./app cron     # Scheduled tasks
+
+# Graceful shutdown (Factor IX)
+kill -TERM $PID  # Waits for in-flight requests
+```
+
+### Production Deployment
+
+```bash
+# Build stage (Factor V)
+docker build -t myapp:v1.2.3 .
+
+# Run stage with environment config (Factor III + VII)
+docker run \
+    -e APP_SERVER_PORT=8080 \
+    -e APP_DATABASE_HOST=prod-db.aws.com \
+    -e APP_DATABASE_PASSWORD=$DB_SECRET \
+    -p 8080:8080 \
+    myapp:v1.2.3 api
+
+# Horizontal scaling (Factor VIII)
+docker-compose up --scale api=3
+```
+
+### Checklist for New Features
+
+When adding new features, ensure:
+- [ ] Configuration via environment variables (Factor III)
+- [ ] No local state in processes (Factor VI)
+- [ ] Graceful shutdown support (Factor IX)
+- [ ] Logs to stdout/stderr (Factor XI)
+- [ ] Same code runs in dev and prod (Factor X)
 
 ---
 
@@ -207,14 +322,15 @@ const maxRetries = 3 // Should be capitalized
 
 **Example**:
 ```go
-// ✅ Good: Go-idiomatic domain entity with public fields
-// Domain entities use public fields for simplicity.
+// ✅ Good: Go-idiomatic domain entity with proper encapsulation
+// Sensitive fields (password) are private, while most fields are public for simplicity.
 // Validation and invariants are enforced through constructors and methods.
 type User struct {
-    ID           int64
-    Email        string
-    PasswordHash string
-    CreatedAt    time.Time
+    ID        int64
+    Email     string
+    password  string // Private field - only accessible via methods
+    CreatedAt time.Time
+    UpdatedAt time.Time
 }
 
 // NewUser is a factory function that ensures the entity is created in a valid state.
@@ -232,17 +348,24 @@ func NewUser(email, password string) (*User, error) {
         return nil, err
     }
 
+    now := time.Now()
     return &User{
-        Email:        email,
-        PasswordHash: hashedPassword,
-        CreatedAt:    time.Now(),
+        Email:     email,
+        password:  hashedPassword, // Store hashed password
+        CreatedAt: now,
+        UpdatedAt: now,
     }, nil
+}
+
+// Password returns the hashed password (read-only access)
+func (u *User) Password() string {
+    return u.password
 }
 
 // ChangePassword is a method that maintains business invariants.
 // It ensures password changes follow business rules.
 func (u *User) ChangePassword(oldPassword, newPassword string) error {
-    if !u.verifyPassword(oldPassword) {
+    if !u.IsPasswordCorrect(oldPassword) {
         return ErrInvalidPassword
     }
 
@@ -255,18 +378,25 @@ func (u *User) ChangePassword(oldPassword, newPassword string) error {
         return err
     }
 
-    u.PasswordHash = hashedPassword
+    u.password = hashedPassword
+    u.UpdatedAt = time.Now()
     return nil
+}
+
+// IsPasswordCorrect checks if the provided password matches the stored hash
+func (u *User) IsPasswordCorrect(password string) bool {
+    return comparePassword(u.password, password)
 }
 
 // ReconstructUser is used by the repository layer to rebuild entities from storage.
 // This separates creation logic (NewUser) from reconstruction logic.
-func ReconstructUser(id int64, email, passwordHash string, createdAt time.Time) *User {
+func ReconstructUser(id int64, email, passwordHash string, createdAt, updatedAt time.Time) *User {
     return &User{
-        ID:           id,
-        Email:        email,
-        PasswordHash: passwordHash,
-        CreatedAt:    createdAt,
+        ID:        id,
+        Email:     email,
+        password:  passwordHash, // Already hashed
+        CreatedAt: createdAt,
+        UpdatedAt: updatedAt,
     }
 }
 
@@ -304,13 +434,11 @@ type UserRepository interface {
 // internal/usecase/user_interactor.go
 type UserInteractor struct {
     userRepo port.UserRepository
-    logger   *slog.Logger
 }
 
-func NewUserInteractor(userRepo port.UserRepository, logger *slog.Logger) *UserInteractor {
+func NewUserInteractor(userRepo port.UserRepository) *UserInteractor {
     return &UserInteractor{
         userRepo: userRepo,
-        logger:   logger,
     }
 }
 
@@ -329,7 +457,6 @@ func (i *UserInteractor) CreateUser(ctx context.Context, email, password string)
 
     // Persist
     if err := i.userRepo.Save(ctx, user); err != nil {
-        i.logger.ErrorContext(ctx, "Failed to save user", "error", err)
         return nil, err
     }
 
@@ -451,6 +578,122 @@ func (h *UserHandler) Create(c *gin.Context) {
     }
 
     c.JSON(http.StatusCreated, ToUserResponse(user))
+}
+```
+
+### 5. Microservices Delivery Layer (`internal/delivery/micro/`)
+
+This project supports microservices using **go-micro v5** framework for RPC-based communication.
+
+**Rules**:
+- ✅ **DO**: Keep handlers thin (validation and transformation only)
+- ✅ **DO**: Convert between protobuf messages and domain entities
+- ✅ **DO**: Use same use case layer as HTTP delivery
+- ✅ **DO**: Handle errors and convert to appropriate RPC errors
+- ❌ **DON'T**: Put business logic in service handlers
+- ❌ **DON'T**: Access repositories directly
+- ❌ **DON'T**: Duplicate use case logic
+
+**Example**:
+```go
+// ✅ Good: Thin microservice handler
+// internal/delivery/micro/handler/user_service.go
+package handler
+
+import (
+    "context"
+    "go-clean-arch/internal/domain"
+    "go-clean-arch/internal/usecase"
+    pb "go-clean-arch/proto/user"
+    "github.com/samber/oops"
+)
+
+type UserService struct {
+    userUsecase usecase.UserUsecase
+}
+
+func NewUserService(userUsecase usecase.UserUsecase) *UserService {
+    return &UserService{
+        userUsecase: userUsecase,
+    }
+}
+
+// CreateUser creates a new user
+func (s *UserService) CreateUser(ctx context.Context, req *pb.CreateUserRequest, rsp *pb.CreateUserResponse) error {
+    // Call usecase (same as HTTP handler)
+    user, err := s.userUsecase.CreateUser(ctx, req.Email, req.Password)
+    if err != nil {
+        return convertError(err)
+    }
+
+    // Convert domain entity to proto response
+    rsp.Id = user.ID
+    rsp.Email = user.Email
+    rsp.CreatedAt = user.CreatedAt.Format("2006-01-02T15:04:05Z07:00")
+    rsp.UpdatedAt = user.UpdatedAt.Format("2006-01-02T15:04:05Z07:00")
+
+    return nil
+}
+
+// convertError converts domain errors to appropriate RPC errors
+func convertError(err error) error {
+    ooErr, ok := err.(oops.OopsError)
+    if !ok {
+        return err
+    }
+
+    // Map domain errors to RPC error codes
+    switch ooErr.Code() {
+    case domain.ErrCodeUserNotFound:
+        return oops.
+            Code("NOT_FOUND").
+            With("message", "user not found").
+            Errorf("user not found")
+    case domain.ErrCodeEmailAlreadyExists:
+        return oops.
+            Code("ALREADY_EXISTS").
+            With("message", "email already exists").
+            Errorf("email already exists")
+    default:
+        return err
+    }
+}
+```
+
+**Key Differences from HTTP Delivery**:
+- Uses protobuf messages instead of JSON DTOs
+- Returns errors directly (no HTTP status codes)
+- go-micro handles service discovery and load balancing
+
+**Registering Microservice**:
+```go
+// internal/app/micro.go
+package app
+
+import (
+    "go-clean-arch/internal/delivery/micro/handler"
+    pb "go-clean-arch/proto/user"
+    "go-micro.dev/v5"
+)
+
+func NewMicroService(db *sqlx.DB, cfg *config.Config) (micro.Service, error) {
+    // Create microservice
+    service := micro.NewService(
+        micro.Name("go.micro.srv.user"),
+        micro.Version("latest"),
+    )
+
+    service.Init()
+
+    // Initialize dependencies
+    userService := InitializeUserService(db, cfg)
+
+    // Register handler
+    if err := pb.RegisterUserServiceHandler(service.Server(), userService); err != nil {
+        return nil, err
+    }
+
+    return service, nil
 }
 ```
 
@@ -936,6 +1179,386 @@ POST   /api/v1/user/changePassword
 
 ---
 
+## Protobuf and gRPC Standards
+
+### Protobuf File Organization
+
+Following [golang-standards/project-layout](https://github.com/golang-standards/project-layout), protobuf files should be placed in the **`api/` directory**, not `proto/`:
+
+```
+.
+├── api/                         # API definitions
+│   ├── proto/
+│   │   └── user/
+│   │       ├── user.proto       # User service definition
+│   │       └── v1/              # Versioned APIs
+│   │           └── user.proto
+│   └── openapi/                 # OpenAPI/Swagger specs
+│       └── openapi.yaml
+```
+
+**Note**: This project currently uses `proto/` directory, which should be migrated to `api/proto/` to follow standard Go project layout.
+
+### Protobuf Style Guide
+
+Follow [Google's Protocol Buffers Style Guide](https://protobuf.dev/programming-guides/style/):
+
+```protobuf
+// ✅ Good: Well-structured proto file
+// api/proto/user/user.proto
+syntax = "proto3";
+
+package user;
+
+option go_package = "go-clean-arch/api/proto/user;user";
+
+// UserService handles user management operations
+service UserService {
+    // CreateUser creates a new user account
+    rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+
+    // GetUser retrieves a user by ID
+    rpc GetUser(GetUserRequest) returns (GetUserResponse);
+
+    // ListUsers lists users with pagination
+    rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+}
+
+// CreateUserRequest contains fields for user creation
+message CreateUserRequest {
+    string email = 1;
+    string password = 2;
+}
+
+// CreateUserResponse returns the created user
+message CreateUserResponse {
+    int64 id = 1;
+    string email = 2;
+    string created_at = 3;
+    string updated_at = 4;
+}
+
+// UserInfo represents basic user information
+message UserInfo {
+    int64 id = 1;
+    string email = 2;
+    string created_at = 3;
+    string updated_at = 4;
+}
+```
+
+### Naming Conventions
+
+**Services**:
+- Use `PascalCase` for service names: `UserService`, `OrderService`
+- Service names should be nouns: `AuthService`, not `Authenticator`
+
+**Methods (RPCs)**:
+- Use `PascalCase` for method names: `CreateUser`, `GetOrder`
+- Start with verb: `Create`, `Get`, `Update`, `Delete`, `List`
+
+**Messages**:
+- Use `PascalCase` for message names: `CreateUserRequest`, `UserResponse`
+- Request messages: `{Method}{Resource}Request`
+- Response messages: `{Method}{Resource}Response`
+- Nested resources: `User.Address`, `Order.Item`
+
+**Fields**:
+- Use `snake_case` for field names: `user_id`, `created_at`
+- Field numbers start at 1
+- Reserve field numbers 19000-19999 for future use
+
+### Code Generation
+
+```bash
+# Install protoc compiler
+# macOS
+brew install protobuf
+
+# Linux
+apt-get install -y protobuf-compiler
+
+# Install Go plugins
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+# Generate Go code from proto files
+protoc --go_out=. --go_opt=paths=source_relative \
+    --go-grpc_out=. --go-grpc_opt=paths=source_relative \
+    api/proto/**/*.proto
+
+# Or use Makefile
+make proto-gen
+```
+
+**Makefile Target**:
+```makefile
+.PHONY: proto-gen
+proto-gen: ## Generate Go code from proto files
+	@echo "Generating protobuf code..."
+	protoc --go_out=. --go_opt=paths=source_relative \
+		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
+		api/proto/**/*.proto
+```
+
+### Versioning API
+
+Use directories for API versioning:
+
+```
+api/
+├── proto/
+│   └── user/
+│       ├── v1/
+│       │   └── user.proto       # Version 1
+│       └── v2/
+│           └── user.proto       # Version 2 (breaking changes)
+```
+
+```protobuf
+// api/proto/user/v1/user.proto
+syntax = "proto3";
+
+package user.v1;
+
+option go_package = "go-clean-arch/api/proto/user/v1;userv1";
+
+// Version 1 of UserService
+service UserService {
+    rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+}
+```
+
+### Error Handling
+
+Use standard gRPC error codes:
+
+```go
+import (
+    "google.golang.org/grpc/codes"
+    "google.golang.org/grpc/status"
+)
+
+// ✅ Good: Proper gRPC error handling
+func (s *UserService) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.GetUserResponse, error) {
+    user, err := s.userUsecase.GetUserByID(ctx, req.Id)
+    if err != nil {
+        // Map domain errors to gRPC codes
+        if errors.Is(err, domain.ErrUserNotFound) {
+            return nil, status.Error(codes.NotFound, "user not found")
+        }
+        return nil, status.Error(codes.Internal, "internal error")
+    }
+
+    return &pb.GetUserResponse{
+        Id:    user.ID,
+        Email: user.Email,
+    }, nil
+}
+```
+
+**Standard gRPC Codes**:
+- `codes.OK` - Success (0)
+- `codes.NotFound` - Resource not found (5)
+- `codes.AlreadyExists` - Resource already exists (6)
+- `codes.InvalidArgument` - Invalid request (3)
+- `codes.Unauthenticated` - Authentication required (16)
+- `codes.PermissionDenied` - Permission denied (7)
+- `codes.Internal` - Internal server error (13)
+
+### Best Practices
+
+**DO**:
+- ✅ Use protobuf3 syntax
+- ✅ Add comments to all services, methods, and messages
+- ✅ Version your APIs (v1, v2)
+- ✅ Use descriptive field names
+- ✅ Keep messages focused and small
+- ✅ Generate code as part of build process
+
+**DON'T**:
+- ❌ Reuse field numbers (after removing fields)
+- ❌ Change field types (breaks backward compatibility)
+- ❌ Use reserved keywords as field names
+- ❌ Commit generated `*.pb.go` files (add to .gitignore)
+- ❌ Put business logic in proto files
+
+### Integration with Clean Architecture
+
+```
+┌─────────────────────────────────────────┐
+│  Protobuf Definitions (api/proto/)     │  ← API contracts
+└──────────────┬──────────────────────────┘
+               │
+┌──────────────▼──────────────────────────┐
+│  Delivery Layer (internal/delivery/)    │  ← Converts Proto ↔ Domain
+│  - micro/handler/user_service.go        │
+└──────────────┬──────────────────────────┘
+               │
+┌──────────────▼──────────────────────────┐
+│  Use Case Layer (internal/usecase/)     │  ← Business logic (proto-agnostic)
+└──────────────┬──────────────────────────┘
+               │
+┌──────────────▼──────────────────────────┐
+│  Domain Layer (internal/domain/)        │  ← Pure domain entities
+└─────────────────────────────────────────┘
+```
+
+**Key Point**: Protobuf messages are **infrastructure concerns** and should **not** leak into use case or domain layers.
+
+---
+
+## Configuration Management
+
+### Using Viper for Configuration
+
+This project uses [Viper](https://github.com/spf13/viper) for configuration management, following the [Twelve-Factor App](https://12factor.net/) methodology (Factor III - Config).
+
+**Key Principles**:
+- ✅ Config files are **OPTIONAL** (Twelve-Factor compliant)
+- ✅ Environment variables override all config values
+- ✅ Support environment-only deployment
+- ✅ No secrets in config files
+
+### Environment Variables
+
+All configuration can be provided via environment variables:
+
+```bash
+# Environment variables use APP_ prefix
+export APP_SERVER_PORT=8080
+export APP_SERVER_HOST=0.0.0.0
+export APP_DATABASE_HOST=postgres.example.com
+export APP_DATABASE_USER=myuser
+export APP_DATABASE_PASSWORD=secret
+export APP_LOGGER_LEVEL=info
+export APP_LOGGER_FORMAT=json
+
+# Run application with environment variables only
+./app api
+```
+
+**Naming Convention**:
+- Prefix: `APP_`
+- Nested keys use underscore: `database.host` → `APP_DATABASE_HOST`
+- All uppercase
+
+### Configuration Files (Optional)
+
+Config files are provided for **local development convenience only**:
+
+```toml
+# configs/config.example.toml
+[server]
+port = 8080
+host = "0.0.0.0"
+mode = "debug"  # debug, release, test
+
+[database]
+driver = "postgres"
+host = "localhost"
+port = 5432
+user = "postgres"
+password = "postgres"
+dbname = "cleanarch"
+sslmode = "disable"
+auto_migrate = false  # Use explicit migrations in production
+
+[logger]
+level = "info"   # debug, info, warn, error
+format = "json"  # json, text
+```
+
+### Configuration Structure
+
+```go
+// pkg/config/config.go
+type Config struct {
+    Server   ServerConfig   `mapstructure:"server"`
+    Database DatabaseConfig `mapstructure:"database"`
+    RabbitMQ RabbitMQConfig `mapstructure:"rabbitmq"`
+    Logger   LoggerConfig   `mapstructure:"logger"`
+}
+
+type ServerConfig struct {
+    Port int    `mapstructure:"port"`
+    Host string `mapstructure:"host"`
+    Mode string `mapstructure:"mode"`
+}
+```
+
+### Loading Configuration
+
+```go
+// Config file is optional - application can run with env vars only
+cfg, err := config.Load("configs/config.toml")  // File path is optional
+if err != nil {
+    return err
+}
+
+// Or for containerized deployments
+cfg, err := config.Load("")  // Empty path = env vars + defaults only
+```
+
+### Best Practices
+
+**DO**:
+- ✅ Support environment-only deployment
+- ✅ Provide `config.example.toml` for local development
+- ✅ Use defaults for non-critical settings
+- ✅ Validate configuration on startup
+- ✅ Document all environment variables in README
+
+**DON'T**:
+- ❌ Commit secrets in config files
+- ❌ Require config files in production
+- ❌ Hard-code configuration values
+- ❌ Bundle config files in Docker images
+- ❌ Use different config structures per environment
+
+### Docker Configuration
+
+```dockerfile
+# Dockerfile - No config files bundled
+FROM alpine:latest
+COPY --from=builder /app/bin/app .
+# ❌ DON'T: COPY configs/ ./configs/
+# ✅ DO: Use environment variables
+ENTRYPOINT ["./app"]
+```
+
+```yaml
+# docker-compose.yaml
+services:
+  api:
+    environment:
+      APP_SERVER_PORT: 8080
+      APP_DATABASE_HOST: postgres
+      APP_DATABASE_USER: ${DB_USER}
+      APP_DATABASE_PASSWORD: ${DB_PASSWORD}
+```
+
+### Environment-Specific Configuration
+
+```bash
+# Development (local)
+export APP_SERVER_MODE=debug
+export APP_LOGGER_LEVEL=debug
+
+# Staging
+export APP_SERVER_MODE=release
+export APP_LOGGER_LEVEL=info
+export APP_DATABASE_HOST=staging-db.example.com
+
+# Production
+export APP_SERVER_MODE=release
+export APP_LOGGER_LEVEL=warn
+export APP_DATABASE_HOST=prod-db.example.com
+export APP_DATABASE_PASSWORD=$(vault read -field=password secret/db)
+```
+
+---
+
 ## Database Standards
 
 ### Migration Files
@@ -979,6 +1602,258 @@ func (r *OrderRepository) CreateOrderWithItems(ctx context.Context, order *domai
 
         return nil
     })
+}
+```
+
+---
+
+## Application Lifecycle
+
+### Graceful Shutdown (Critical Requirement)
+
+All application modes (API, Worker, Cron) **MUST** implement graceful shutdown to ensure:
+- In-flight requests complete before shutdown
+- Database connections are properly closed
+- Message queues are gracefully drained
+- No data loss occurs during deployments
+
+**This is a Twelve-Factor App requirement (Factor IX - Disposability).**
+
+### Signal Handling
+
+Applications must handle the following signals:
+- `SIGTERM` - Graceful shutdown (from orchestrator)
+- `SIGINT` - Graceful shutdown (Ctrl+C)
+
+```go
+// ✅ Good: Proper signal handling
+import (
+    "context"
+    "os"
+    "os/signal"
+    "syscall"
+    "time"
+)
+
+func (s *APIServer) Start() error {
+    // Create HTTP server
+    server := &http.Server{
+        Addr:    fmt.Sprintf(":%d", s.port),
+        Handler: router,
+    }
+
+    // Channel for server errors
+    serverErrors := make(chan error, 1)
+
+    // Start server in goroutine
+    go func() {
+        logger.Info("API server listening", "address", server.Addr)
+        serverErrors <- server.ListenAndServe()
+    }()
+
+    // Channel for shutdown signals
+    shutdown := make(chan os.Signal, 1)
+    signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+
+    // Block until error or shutdown signal
+    select {
+    case err := <-serverErrors:
+        return fmt.Errorf("server error: %w", err)
+
+    case sig := <-shutdown:
+        logger.Info("Shutdown signal received", "signal", sig)
+
+        // Give outstanding requests 30 seconds to complete
+        ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+        defer cancel()
+
+        // Gracefully shutdown server
+        if err := server.Shutdown(ctx); err != nil {
+            logger.Error("Graceful shutdown failed", "error", err)
+            // Force close if graceful fails
+            server.Close()
+            return fmt.Errorf("failed to gracefully shutdown: %w", err)
+        }
+
+        // Close database connections
+        if err := s.db.Close(); err != nil {
+            logger.Error("Failed to close database", "error", err)
+        }
+
+        logger.Info("Server stopped gracefully")
+        return nil
+    }
+}
+```
+
+### API Server Shutdown
+
+**Requirements**:
+- ✅ Stop accepting new requests
+- ✅ Complete in-flight HTTP requests
+- ✅ Close database connections
+- ✅ Timeout after 30 seconds maximum
+
+**Example**: See `internal/app/api.go:40-80`
+
+### Worker Shutdown
+
+**Requirements**:
+- ✅ Stop consuming new messages
+- ✅ Complete processing of current messages
+- ✅ Acknowledge/nack messages properly
+- ✅ Close message queue connections
+- ✅ Close database connections
+
+```go
+// ✅ Good: Worker graceful shutdown
+func (w *Worker) Start() error {
+    consumer := InitializeOrderConsumer(w.db, w.cfg)
+
+    // Shutdown signal channel
+    shutdown := make(chan os.Signal, 1)
+    signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+    // Consumer error channel
+    consumerErrors := make(chan error, 1)
+
+    go func() {
+        consumerErrors <- consumer.Start()
+    }()
+
+    select {
+    case err := <-consumerErrors:
+        return fmt.Errorf("consumer error: %w", err)
+
+    case sig := <-shutdown:
+        logger.Info("Shutdown signal received", "signal", sig)
+
+        ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+        defer cancel()
+
+        // Gracefully shutdown consumer
+        if err := consumer.Shutdown(ctx); err != nil {
+            logger.Error("Failed to shutdown consumer", "error", err)
+        }
+
+        // Close database
+        if err := w.db.Close(); err != nil {
+            logger.Error("Failed to close database", "error", err)
+        }
+
+        logger.Info("Worker stopped gracefully")
+        return nil
+    }
+}
+```
+
+### Cron Job Shutdown
+
+**Requirements**:
+- ✅ Stop accepting new job triggers
+- ✅ Wait for running jobs to complete
+- ✅ Timeout after 30 seconds
+- ✅ Close database connections
+
+```go
+// ✅ Good: Cron graceful shutdown
+func (c *CronScheduler) Start() error {
+    scheduler := cron.New()
+    // ... add jobs ...
+    scheduler.Start()
+
+    // Wait for shutdown signal
+    shutdown := make(chan os.Signal, 1)
+    signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+    <-shutdown
+    logger.Info("Shutdown signal received")
+
+    // Stop scheduler and get context
+    ctx := scheduler.Stop()
+
+    // Wait for jobs with timeout
+    select {
+    case <-ctx.Done():
+        logger.Info("All jobs completed")
+    case <-time.After(30 * time.Second):
+        logger.Warn("Timeout waiting for jobs to complete")
+    }
+
+    // Close database
+    if err := c.db.Close(); err != nil {
+        logger.Error("Failed to close database", "error", err)
+    }
+
+    logger.Info("Cron scheduler stopped gracefully")
+    return nil
+}
+```
+
+### Testing Graceful Shutdown
+
+Create a test script to verify graceful shutdown:
+
+```bash
+#!/bin/bash
+# scripts/test-graceful-shutdown.sh
+
+echo "Starting API server..."
+./app api &
+PID=$!
+
+sleep 2
+
+echo "Sending SIGTERM to process $PID"
+kill -TERM $PID
+
+wait $PID
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo "✅ Graceful shutdown successful"
+else
+    echo "❌ Graceful shutdown failed with exit code $EXIT_CODE"
+    exit 1
+fi
+```
+
+### Expected Shutdown Behavior
+
+```
+[INFO] API server listening address=:8080
+[INFO] Received 3 requests
+[INFO] Shutdown signal received signal=SIGTERM
+[INFO] Stopping server, waiting for 3 in-flight requests
+[INFO] All requests completed
+[INFO] Closing database connections
+[INFO] Server stopped gracefully
+```
+
+### Common Mistakes
+
+```go
+// ❌ Bad: No graceful shutdown
+func (s *APIServer) Start() error {
+    router := gin.Default()
+    // ...
+    return router.Run(":8080")  // Blocks forever, no cleanup
+}
+
+// ❌ Bad: Force close immediately
+func (s *APIServer) Start() error {
+    // ...
+    <-shutdown
+    s.server.Close()  // Abruptly closes all connections
+    return nil
+}
+
+// ❌ Bad: No timeout
+func (s *APIServer) Start() error {
+    // ...
+    <-shutdown
+    s.server.Shutdown(context.Background())  // May wait forever
+    return nil
 }
 ```
 
