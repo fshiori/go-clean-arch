@@ -12,17 +12,20 @@
 //   - APP_SERVER_PORT overrides server.port
 //
 // Usage with config file (optional):
-//   cfg, err := config.Load("configs/config.toml")
+//
+//	cfg, err := config.Load("configs/config.toml")
 //
 // Usage with environment variables only:
-//   cfg, err := config.Load("")  // Empty path = env vars + defaults only
+//
+//	cfg, err := config.Load("")  // Empty path = env vars + defaults only
 //
 // Example environment-only deployment:
-//   export APP_SERVER_PORT=8080
-//   export APP_DATABASE_HOST=postgres.example.com
-//   export APP_DATABASE_USER=myuser
-//   export APP_DATABASE_PASSWORD=secret
-//   ./app api
+//
+//	export APP_SERVER_PORT=8080
+//	export APP_DATABASE_HOST=postgres.example.com
+//	export APP_DATABASE_USER=myuser
+//	export APP_DATABASE_PASSWORD=secret
+//	./app api
 package config
 
 import (
@@ -53,7 +56,7 @@ type ServerConfig struct {
 
 // DatabaseConfig holds database-related configuration
 type DatabaseConfig struct {
-	Driver      string `mapstructure:"driver"`       // postgres, mysql, sqlite
+	Driver      string `mapstructure:"driver"` // postgres, mysql, sqlite
 	Host        string `mapstructure:"host"`
 	Port        int    `mapstructure:"port"`
 	User        string `mapstructure:"user"`
