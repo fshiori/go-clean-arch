@@ -6,7 +6,7 @@ A production-ready Go application implementing Clean Architecture principles wit
 
 - ✅ **Twelve-Factor App Compliant** (12/12 factors)
 - ✅ **Clean Architecture** with clear separation of concerns
-- ✅ **Multiple Runtime Modes**: API, Worker, Cron from single codebase
+- ✅ **Multiple Runtime Modes**: API, Worker, Cron, Microservice from single codebase
 - ✅ **Graceful Shutdown**: Proper signal handling for zero-downtime deployments
 - ✅ **Environment-First Config**: Runs with only environment variables (no config files required)
 - ✅ **Database Migrations**: Built-in migration commands (Factor XII compliant)
@@ -53,7 +53,7 @@ This project follows Clean Architecture and Standard Go Project Layout principle
 ```
 ┌─────────────────────────────────────────┐
 │          Delivery Layer                 │
-│   (HTTP, Workers, Cron Jobs)            │
+│   (HTTP, Workers, Cron, Microservice)   │
 └──────────────┬──────────────────────────┘
                │
 ┌──────────────▼──────────────────────────┐
@@ -117,8 +117,11 @@ This project follows Clean Architecture and Standard Go Project Layout principle
 │       │   └── router.go
 │       ├── consumer/       # Message queue consumers
 │       │   └── order_consumer.go
-│       └── job/            # Cron jobs
-│           └── daily_report_job.go
+│       ├── job/            # Cron jobs
+│       │   └── daily_report_job.go
+│       └── micro/          # Microservice RPC handlers
+│           └── handler/
+│               └── user_service_simple.go
 ├── pkg/                    # Public shared libraries
 │   ├── config/
 │   │   └── config.go
@@ -238,6 +241,38 @@ go run cmd/app/main.go --mode=cron
 
 The cron scheduler will start and run scheduled jobs.
 
+#### Microservice Mode
+
+```bash
+# Start with default settings (service name: go.micro.service.user, address: :8081)
+./app micro
+
+# Start with custom settings
+./app micro --service-name user.service --version v1.0.0 --address :8082
+
+# With config file
+./app micro --config configs/config.toml
+```
+
+The microservice will start a JSON-RPC style server for inter-service communication.
+
+**Available RPC Endpoints:**
+
+- `POST /rpc/user/create` - Create a new user
+- `POST /rpc/user/get` - Get user by ID
+- `POST /rpc/user/list` - List users (with pagination)
+- `POST /rpc/user/update-password` - Update user password
+- `POST /rpc/user/delete` - Delete user
+- `GET /info` - Service information
+
+**Example RPC call:**
+
+```bash
+curl -X POST http://localhost:8081/rpc/user/create \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"secret123"}'
+```
+
 ### Building
 
 ```bash
@@ -261,13 +296,16 @@ make lint
 docker build -t go-clean-arch:latest .
 
 # Run API mode
-docker run -p 8080:8080 go-clean-arch:latest --mode=api
+docker run -p 8080:8080 go-clean-arch:latest api
 
 # Run Worker mode
-docker run go-clean-arch:latest --mode=worker
+docker run go-clean-arch:latest worker
 
 # Run Cron mode
-docker run go-clean-arch:latest --mode=cron
+docker run go-clean-arch:latest cron
+
+# Run Microservice mode
+docker run -p 8081:8081 go-clean-arch:latest micro --address :8081
 ```
 
 ## API Endpoints

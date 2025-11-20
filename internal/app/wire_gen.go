@@ -16,6 +16,7 @@ import (
 	"go-clean-arch/internal/delivery/http"
 	"go-clean-arch/internal/delivery/http/handler"
 	"go-clean-arch/internal/delivery/job"
+	handler2 "go-clean-arch/internal/delivery/micro/handler"
 	"go-clean-arch/internal/usecase"
 	"go-clean-arch/pkg/config"
 )
@@ -61,6 +62,15 @@ func InitializeCronScheduler(db *sqlx.DB, cfg *config.Config) *job.Scheduler {
 	return scheduler
 }
 
+// InitializeMicroService initializes the microservice with all dependencies
+// Note: Only includes user-related dependencies since microservice only handles users
+func InitializeMicroService(db *sqlx.DB, cfg *config.Config) *handler2.UserServiceSimple {
+	userRepository := repository.NewUserRepository(db)
+	userInteractor := usecase.NewUserInteractor(userRepository)
+	userServiceSimple := handler2.NewUserServiceSimple(userInteractor)
+	return userServiceSimple
+}
+
 // wire.go:
 
 // ProvideStripeAPIKey provides the Stripe API key from config
@@ -87,3 +97,12 @@ var ConsumerSet = wire.NewSet(consumer.NewOrderConsumer)
 
 // JobSet provides all job dependencies
 var JobSet = wire.NewSet(job.NewDailyReportJob, job.NewScheduler)
+
+// MicroHandlerSet provides all microservice handler dependencies
+var MicroHandlerSet = wire.NewSet(handler2.NewUserServiceSimple)
+
+// UserRepositorySet provides user repository only (for microservice)
+var UserRepositorySet = wire.NewSet(repository.NewUserRepository)
+
+// UserUseCaseSet provides user use case only (for microservice)
+var UserUseCaseSet = wire.NewSet(usecase.NewUserInteractor, wire.Bind(new(usecase.UserUsecase), new(*usecase.UserInteractor)))
