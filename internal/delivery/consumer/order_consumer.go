@@ -112,7 +112,7 @@ func (c *OrderConsumer) handleCancelOrder(ctx context.Context, orderID int64) er
 
 // Start starts consuming messages from the queue
 // This is a simplified example; in production, you'd connect to a real message queue
-func (c *OrderConsumer) Start() error {
+func (c *OrderConsumer) Start(ctx context.Context) error {
 	logger.Info("Starting order consumer...")
 
 	// TODO: Connect to message queue (RabbitMQ, Kafka, etc.)
@@ -134,7 +134,7 @@ func (c *OrderConsumer) Start() error {
 	// msgs, err := ch.Consume(
 	//     "order_queue", // queue name
 	//     "",            // consumer
-	//     true,          // auto-ack
+	//     false,         // auto-ack (set to false for graceful shutdown)
 	//     false,         // exclusive
 	//     false,         // no-local
 	//     false,         // no-wait
@@ -147,14 +147,30 @@ func (c *OrderConsumer) Start() error {
 	//
 	// logger.Info("Order consumer connected and waiting for messages...")
 	//
-	// for msg := range msgs {
-	//     if err := c.ConsumeMessage(msg.Body); err != nil {
-	//         logger.Error("Error processing message", "error", err)
+	// // Consume messages with graceful shutdown support
+	// for {
+	//     select {
+	//     case msg, ok := <-msgs:
+	//         if !ok {
+	//             logger.Info("Message channel closed")
+	//             return nil
+	//         }
+	//         if err := c.ConsumeMessage(msg.Body); err != nil {
+	//             logger.Error("Error processing message", "error", err)
+	//             msg.Nack(false, true) // Negative ack, requeue
+	//         } else {
+	//             msg.Ack(false) // Acknowledge successful processing
+	//         }
+	//     case <-ctx.Done():
+	//         logger.Info("Shutdown signal received, stopping consumer...")
+	//         return nil
 	//     }
 	// }
 
 	logger.Info("Order consumer is running...")
 
-	// Block forever
-	select {}
+	// Wait for context cancellation (graceful shutdown)
+	<-ctx.Done()
+	logger.Info("Consumer shutdown signal received")
+	return nil
 }
