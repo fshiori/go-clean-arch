@@ -2,8 +2,8 @@
 // It supports multiple configuration formats (TOML, YAML, JSON) and automatic
 // environment variable overrides.
 //
-// Configuration files should be placed in the configs/ directory.
-// The default configuration file is configs/config.toml.
+// Configuration files are OPTIONAL. The application can run with only environment
+// variables and defaults, supporting fully Twelve-Factor App compliant deployments.
 //
 // Environment variables can override any configuration value using the APP_ prefix.
 // For example:
@@ -11,16 +11,27 @@
 //   - APP_LOGGER_LEVEL overrides logger.level
 //   - APP_SERVER_PORT overrides server.port
 //
-// Usage:
-//   cfg, err := config.Load("configs/config.toml")
-//   if err != nil {
-//       log.Fatal(err)
-//   }
-//   fmt.Println(cfg.Server.Port)
+// Usage with config file (optional):
+//
+//	cfg, err := config.Load("configs/config.toml")
+//
+// Usage with environment variables only:
+//
+//	cfg, err := config.Load("")  // Empty path = env vars + defaults only
+//
+// Example environment-only deployment:
+//
+//	export APP_SERVER_PORT=8080
+//	export APP_DATABASE_HOST=postgres.example.com
+//	export APP_DATABASE_USER=myuser
+//	export APP_DATABASE_PASSWORD=secret
+//	./app api
 package config
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -45,7 +56,7 @@ type ServerConfig struct {
 
 // DatabaseConfig holds database-related configuration
 type DatabaseConfig struct {
-	Driver      string `mapstructure:"driver"`       // postgres, mysql, sqlite
+	Driver      string `mapstructure:"driver"` // postgres, mysql, sqlite
 	Host        string `mapstructure:"host"`
 	Port        int    `mapstructure:"port"`
 	User        string `mapstructure:"user"`
@@ -78,13 +89,20 @@ type LoggerConfig struct {
 	Format string `mapstructure:"format"` // json, text
 }
 
-// Load loads configuration from a file using Viper
+// Load loads configuration from a file using Viper.
+// The config file is OPTIONAL. If path is empty or file doesn't exist,
+// configuration will be loaded from environment variables and defaults only.
+//
 // Supported formats: toml, yaml, json, etc.
+//
+// Twelve-Factor App Compliance:
+// This implementation follows Factor III (Config) by supporting environment-only
+// configuration. Config files are provided for local development convenience only.
 func Load(path string) (*Config, error) {
 	v := viper.New()
 
-	// Set config file path
-	v.SetConfigFile(path)
+	// Set default values first (before file and env vars)
+	setDefaults(v)
 
 	// Enable automatic environment variable override
 	// Environment variables should be prefixed with APP_
@@ -93,15 +111,27 @@ func Load(path string) (*Config, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
-	// Set default values
-	setDefaults(v)
+	// Try to read config file (optional - non-fatal if missing)
+	if path != "" {
+		v.SetConfigFile(path)
 
-	// Read config file
-	if err := v.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		if err := v.ReadInConfig(); err != nil {
+			// Check if file exists
+			if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+				// File doesn't exist - this is OK, use env vars and defaults
+				log.Printf("[Config] Config file not found at %s, using environment variables and defaults", path)
+			} else {
+				// File exists but couldn't be read - this might be a problem
+				log.Printf("[Config] Warning: Config file exists but couldn't be read: %v. Using environment variables and defaults", err)
+			}
+		} else {
+			log.Printf("[Config] Loaded configuration from file: %s", path)
+		}
+	} else {
+		log.Printf("[Config] No config file specified, using environment variables and defaults (Twelve-Factor compliant)")
 	}
 
-	// Unmarshal config
+	// Unmarshal config (from defaults, file if present, and env vars)
 	var config Config
 	if err := v.Unmarshal(&config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
@@ -127,7 +157,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("database.host", "localhost")
 	v.SetDefault("database.port", 5432)
 	v.SetDefault("database.sslmode", "disable")
-	v.SetDefault("database.auto_migrate", true)
+	// Auto-migrate disabled by default for production safety
+	// Use explicit migration commands instead (Factor XII - Admin Processes)
+	v.SetDefault("database.auto_migrate", false)
 
 	// RabbitMQ defaults
 	v.SetDefault("rabbitmq.url", "amqp://guest:guest@localhost:5672/")

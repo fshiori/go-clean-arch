@@ -1,5 +1,16 @@
 # Production Configuration Example
-# Use environment variables to override sensitive values
+# IMPORTANT: Config files are OPTIONAL and NOT RECOMMENDED for production!
+#
+# Twelve-Factor App Compliance (Factor III - Config):
+# - Production deployments should use ONLY environment variables
+# - This file is provided as a reference/template only
+# - DO NOT bundle this file into Docker images
+# - DO NOT commit sensitive values to version control
+#
+# Use environment variables to override all values:
+#   APP_DATABASE_PASSWORD=secret
+#   APP_STRIPE_API_KEY=sk_live_xxx
+#   APP_RABBITMQ_URL=amqp://user:pass@rabbitmq.prod:5672/
 
 [server]
 port = 8080

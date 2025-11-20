@@ -1,4 +1,10 @@
 # Application Configuration
+# NOTE: Config files are OPTIONAL! This application follows Twelve-Factor App methodology.
+# In production, use environment variables instead of config files.
+#
+# Environment variables override values using APP_ prefix:
+#   APP_DATABASE_PASSWORD=secret
+#   APP_LOGGER_LEVEL=debug
 
 server:
   port: 8080
@@ -13,7 +19,8 @@ database:
   password: "password"
   dbname: "go_clean_arch"
   sslmode: "disable"
-  auto_migrate: true
+  # Auto-migrate disabled - use explicit migrations: ./app migrate up
+  auto_migrate: false
 
 rabbitmq:
   url: "amqp://guest:guest@localhost:5672/"

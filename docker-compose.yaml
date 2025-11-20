@@ -35,16 +35,21 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: go-clean-arch-api
-    command: ["--mode=api", "--config=/app/configs/config.yaml"]
+    command: ["api"]  # No --config flag needed (Twelve-Factor compliant)
     ports:
       - "8080:8080"
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: go_clean_arch
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      # Twelve-Factor App compliant configuration via environment variables
+      # All variables use APP_ prefix to override defaults
+      APP_SERVER_PORT: 8080
+      APP_DATABASE_HOST: postgres
+      APP_DATABASE_PORT: 5432
+      APP_DATABASE_USER: postgres
+      APP_DATABASE_PASSWORD: postgres
+      APP_DATABASE_DBNAME: go_clean_arch
+      APP_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      APP_LOGGER_LEVEL: info
+      APP_LOGGER_FORMAT: json
     depends_on:
       - postgres
       - rabbitmq
@@ -58,14 +63,18 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: go-clean-arch-worker
-    command: ["--mode=worker", "--config=/app/configs/config.yaml"]
+    command: ["worker"]  # No --config flag needed (Twelve-Factor compliant)
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: go_clean_arch
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      # Twelve-Factor App compliant configuration via environment variables
+      APP_DATABASE_HOST: postgres
+      APP_DATABASE_PORT: 5432
+      APP_DATABASE_USER: postgres
+      APP_DATABASE_PASSWORD: postgres
+      APP_DATABASE_DBNAME: go_clean_arch
+      APP_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      APP_RABBITMQ_QUEUE_NAME: order_queue
+      APP_LOGGER_LEVEL: info
+      APP_LOGGER_FORMAT: json
     depends_on:
       - postgres
       - rabbitmq
@@ -79,13 +88,17 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: go-clean-arch-cron
-    command: ["--mode=cron", "--config=/app/configs/config.yaml"]
+    command: ["cron"]  # No --config flag needed (Twelve-Factor compliant)
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: go_clean_arch
+      # Twelve-Factor App compliant configuration via environment variables
+      APP_DATABASE_HOST: postgres
+      APP_DATABASE_PORT: 5432
+      APP_DATABASE_USER: postgres
+      APP_DATABASE_PASSWORD: postgres
+      APP_DATABASE_DBNAME: go_clean_arch
+      APP_CRON_DAILY_REPORT_SCHEDULE: "0 0 * * *"
+      APP_LOGGER_LEVEL: info
+      APP_LOGGER_FORMAT: json
     depends_on:
       - postgres
     networks:
