@@ -67,8 +67,8 @@ func (j *DailyReportJob) Run() error {
 
 // Scheduler manages all cron jobs
 type Scheduler struct {
-	cron            *cron.Cron
-	dailyReportJob  *DailyReportJob
+	cron           *cron.Cron
+	dailyReportJob *DailyReportJob
 }
 
 // NewScheduler creates a new job scheduler
@@ -79,7 +79,7 @@ func NewScheduler(dailyReportJob *DailyReportJob) *Scheduler {
 	}
 }
 
-// Start starts all scheduled jobs
+// Start starts all scheduled jobs and returns immediately
 func (s *Scheduler) Start() error {
 	logger.Info("Starting cron scheduler...")
 
@@ -107,13 +107,14 @@ func (s *Scheduler) Start() error {
 	s.cron.Start()
 	logger.Info("Cron scheduler started successfully", "jobs_count", len(s.cron.Entries()))
 
-	// Block forever
-	select {}
+	return nil
 }
 
-// Stop stops the scheduler
-func (s *Scheduler) Stop() {
+// Stop stops the scheduler gracefully, waiting for running jobs to complete
+// Returns a context that will be done when all jobs have finished
+func (s *Scheduler) Stop() context.Context {
 	logger.Info("Stopping cron scheduler...")
-	s.cron.Stop()
-	logger.Info("Cron scheduler stopped")
+	ctx := s.cron.Stop()
+	logger.Info("Cron scheduler stopped, waiting for jobs to complete...")
+	return ctx
 }
