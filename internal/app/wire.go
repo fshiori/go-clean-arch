@@ -14,6 +14,7 @@ import (
 	"go-clean-arch/internal/delivery/http"
 	"go-clean-arch/internal/delivery/http/handler"
 	"go-clean-arch/internal/delivery/job"
+	microhandler "go-clean-arch/internal/delivery/micro/handler"
 	"go-clean-arch/internal/usecase"
 	"go-clean-arch/pkg/config"
 
@@ -65,6 +66,22 @@ var JobSet = wire.NewSet(
 	job.NewScheduler,
 )
 
+// MicroHandlerSet provides all microservice handler dependencies
+var MicroHandlerSet = wire.NewSet(
+	microhandler.NewUserServiceSimple,
+)
+
+// UserRepositorySet provides user repository only (for microservice)
+var UserRepositorySet = wire.NewSet(
+	repository.NewUserRepository,
+)
+
+// UserUseCaseSet provides user use case only (for microservice)
+var UserUseCaseSet = wire.NewSet(
+	usecase.NewUserInteractor,
+	wire.Bind(new(usecase.UserUsecase), new(*usecase.UserInteractor)),
+)
+
 // InitializeAPIRouter initializes the API router with all dependencies
 func InitializeAPIRouter(db *sqlx.DB, cfg *config.Config) *gin.Engine {
 	wire.Build(
@@ -95,6 +112,17 @@ func InitializeCronScheduler(db *sqlx.DB, cfg *config.Config) *job.Scheduler {
 		GatewaySet,
 		UseCaseSet,
 		JobSet,
+	)
+	return nil
+}
+
+// InitializeMicroService initializes the microservice with all dependencies
+// Note: Only includes user-related dependencies since microservice only handles users
+func InitializeMicroService(db *sqlx.DB, cfg *config.Config) *microhandler.UserServiceSimple {
+	wire.Build(
+		UserRepositorySet,
+		UserUseCaseSet,
+		MicroHandlerSet,
 	)
 	return nil
 }

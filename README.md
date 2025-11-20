@@ -6,7 +6,7 @@ A production-ready Go application implementing Clean Architecture principles wit
 
 - ✅ **Twelve-Factor App Compliant** (12/12 factors)
 - ✅ **Clean Architecture** with clear separation of concerns
-- ✅ **Multiple Runtime Modes**: API, Worker, Cron from single codebase
+- ✅ **Multiple Runtime Modes**: API, Worker, Cron, Microservice from single codebase
 - ✅ **Graceful Shutdown**: Proper signal handling for zero-downtime deployments
 - ✅ **Environment-First Config**: Runs with only environment variables (no config files required)
 - ✅ **Database Migrations**: Built-in migration commands (Factor XII compliant)
@@ -53,7 +53,7 @@ This project follows Clean Architecture and Standard Go Project Layout principle
 ```
 ┌─────────────────────────────────────────┐
 │          Delivery Layer                 │
-│   (HTTP, Workers, Cron Jobs)            │
+│   (HTTP, Workers, Cron, Microservice)   │
 └──────────────┬──────────────────────────┘
                │
 ┌──────────────▼──────────────────────────┐
@@ -117,8 +117,11 @@ This project follows Clean Architecture and Standard Go Project Layout principle
 │       │   └── router.go
 │       ├── consumer/       # Message queue consumers
 │       │   └── order_consumer.go
-│       └── job/            # Cron jobs
-│           └── daily_report_job.go
+│       ├── job/            # Cron jobs
+│       │   └── daily_report_job.go
+│       └── micro/          # Microservice RPC handlers
+│           └── handler/
+│               └── user_service_simple.go
 ├── pkg/                    # Public shared libraries
 │   ├── config/
 │   │   └── config.go
@@ -238,6 +241,103 @@ go run cmd/app/main.go --mode=cron
 
 The cron scheduler will start and run scheduled jobs.
 
+#### Microservice Mode
+
+```bash
+# Start with default settings (service name: go.micro.service.user, address: :8081)
+./app micro
+
+# Start with custom settings
+./app micro --service-name user.service --version v1.0.0 --address :8082
+
+# With config file
+./app micro --config configs/config.toml
+```
+
+The microservice uses **go-micro v5** framework for RPC communication. It provides service discovery, load balancing, and pluggable transports out of the box.
+
+**Key Features:**
+- ✅ Full go-micro v5 integration
+- ✅ Service registry and discovery
+- ✅ Pluggable transports (HTTP, gRPC, etc.)
+- ✅ Handler-based RPC with automatic serialization
+- ✅ Clean architecture maintained
+
+**Available RPC Methods:**
+
+The service exposes the following RPC methods via go-micro:
+
+- `UserServiceSimple.CreateUser` - Create a new user
+- `UserServiceSimple.GetUser` - Get user by ID
+- `UserServiceSimple.ListUsers` - List users (with pagination)
+- `UserServiceSimple.UpdatePassword` - Update user password
+- `UserServiceSimple.DeleteUser` - Delete user
+
+**Calling the Microservice:**
+
+Using go-micro client:
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "go-micro.dev/v5"
+    "go-micro.dev/v5/client"
+)
+
+type CreateUserReq struct {
+    Email    string `json:"email"`
+    Password string `json:"password"`
+}
+
+type CreateUserRsp struct {
+    ID        int64  `json:"id"`
+    Email     string `json:"email"`
+    CreatedAt string `json:"created_at"`
+    UpdatedAt string `json:"updated_at"`
+}
+
+func main() {
+    service := micro.NewService()
+    service.Init()
+
+    req := &CreateUserReq{
+        Email:    "user@example.com",
+        Password: "secret123",
+    }
+    rsp := &CreateUserRsp{}
+
+    err := service.Client().Call(
+        context.Background(),
+        service.Client().NewRequest(
+            "go.micro.service.user",
+            "UserServiceSimple.CreateUser",
+            req,
+        ),
+        rsp,
+    )
+
+    if err != nil {
+        fmt.Println("Error:", err)
+        return
+    }
+
+    fmt.Printf("Created user: %+v\n", rsp)
+}
+```
+
+**Using HTTP transport:**
+
+go-micro v5 supports HTTP by default:
+
+```bash
+curl -X POST http://localhost:8081/UserServiceSimple/CreateUser \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"secret123"}'
+```
+
 ### Building
 
 ```bash
@@ -261,13 +361,16 @@ make lint
 docker build -t go-clean-arch:latest .
 
 # Run API mode
-docker run -p 8080:8080 go-clean-arch:latest --mode=api
+docker run -p 8080:8080 go-clean-arch:latest api
 
 # Run Worker mode
-docker run go-clean-arch:latest --mode=worker
+docker run go-clean-arch:latest worker
 
 # Run Cron mode
-docker run go-clean-arch:latest --mode=cron
+docker run go-clean-arch:latest cron
+
+# Run Microservice mode
+docker run -p 8081:8081 go-clean-arch:latest micro --address :8081
 ```
 
 ## API Endpoints
