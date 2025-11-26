@@ -1,4 +1,4 @@
-.PHONY: help build build-all run-api run-worker run-cron test lint clean docker-build
+.PHONY: help build build-all run-api run-worker run-cron test lint clean docker-build gen wire-gen proto-gen mock-gen
 
 # Variables
 APP_NAME=go-clean-arch
@@ -9,6 +9,34 @@ LDFLAGS=-ldflags "-w -s"
 
 help: ## Display this help screen
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+
+gen: wire-gen proto-gen mock-gen ## Regenerate all generated code
+
+wire-gen: ## Regenerate Wire dependency injection code
+	@echo "Generating Wire code..."
+	@command -v wire >/dev/null 2>&1 || go install github.com/google/wire/cmd/wire@latest
+	wire gen ./internal/app
+
+proto-gen: ## Generate Go code from proto files
+	@echo "Generating protobuf code..."
+	@command -v protoc-gen-go >/dev/null 2>&1 || go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+	@command -v protoc-gen-go-grpc >/dev/null 2>&1 || go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	@if [ -d "api/proto" ] && [ -n "$$(find api/proto -name '*.proto' 2>/dev/null)" ]; then \
+		protoc --go_out=. --go_opt=paths=source_relative \
+			--go-grpc_out=. --go-grpc_opt=paths=source_relative \
+			api/proto/**/*.proto; \
+	else \
+		echo "No proto files found in api/proto/, skipping..."; \
+	fi
+
+mock-gen: ## Generate mocks for testing
+	@echo "Generating mocks..."
+	@command -v mockery >/dev/null 2>&1 || go install github.com/vektra/mockery/v2@latest
+	@if [ -d "internal/usecase/port" ]; then \
+		mockery --dir=internal/usecase/port --all --output=internal/usecase/port/mocks --case underscore; \
+	else \
+		echo "Directory internal/usecase/port not found, skipping mock generation"; \
+	fi
 
 build: ## Build the application for current platform
 	@echo "Building $(APP_NAME)..."

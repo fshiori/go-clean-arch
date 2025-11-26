@@ -26,7 +26,8 @@
 13. [Configuration Management](#configuration-management)
 14. [Database Standards](#database-standards)
 15. [Application Lifecycle](#application-lifecycle)
-16. [Git Workflow](#git-workflow)
+16. [Generated Code Policy](#generated-code-policy)
+17. [Git Workflow](#git-workflow)
 
 ---
 
@@ -1690,12 +1691,13 @@ func (s *UserService) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.
 - ✅ Use descriptive field names
 - ✅ Keep messages focused and small
 - ✅ Generate code as part of build process
+- ✅ Commit generated `*.pb.go` files so the project is buildable after cloning
+- ⚠️ **WARNING**: Ensure you use the same `protoc` version as the team (defined in Makefile/Dockerfile) to avoid noise in diffs
 
 **DON'T**:
 - ❌ Reuse field numbers (after removing fields)
 - ❌ Change field types (breaks backward compatibility)
 - ❌ Use reserved keywords as field names
-- ❌ Commit generated `*.pb.go` files (add to .gitignore)
 - ❌ Put business logic in proto files
 
 ### Integration with Clean Architecture
@@ -2261,6 +2263,138 @@ func (s *APIServer) Start() error {
     return nil
 }
 ```
+
+---
+
+## Generated Code Policy
+
+This project uses code generation tools for dependency injection, protobuf, and mocks. Generated code **MUST be committed** to ensure the repository is buildable immediately after cloning, following Go ecosystem best practices.
+
+### Why Commit Generated Code?
+
+**✅ Benefits**:
+- **Immediate Buildability**: `git clone` → `go build` works without installing code generation tools
+- **CI/CD Simplicity**: No need to install `wire`, `protoc`, and plugins in CI pipeline
+- **Lower Developer Onboarding**: New developers don't need to set up complex toolchains
+- **Library Compatibility**: If used as a Go library, `go get` will fetch working code
+- **Code Review**: Changes to generated code help reviewers catch breaking changes
+
+**⚠️ Trade-offs**:
+- Larger repository size (usually negligible for Go projects)
+- Generated code in pull requests (can be hidden with `.gitattributes`)
+
+### Files to Commit
+
+| Generated File | Tool | Commit? | Reason |
+|----------------|------|---------|--------|
+| `wire_gen.go` | Wire | ✅ **MUST** | Required for compilation; stable output |
+| `*.pb.go` | protoc | ✅ **MUST** | Required for compilation; ensures version consistency |
+| `mock_*.go` | mockery | ✅ **SHOULD** | Simplifies testing; reviewable interface changes |
+
+### Keeping Generated Files Up-to-Date
+
+**Developer Workflow**:
+```bash
+# After modifying wire.go, regenerate
+wire gen ./internal/app
+
+# After modifying .proto files, regenerate
+make proto-gen
+
+# After modifying interfaces, regenerate mocks
+make mock-gen
+
+# Or regenerate everything
+make gen
+```
+
+**Best Practices**:
+- ✅ **DO**: Regenerate before committing
+- ✅ **DO**: Include generated files in the same commit as source changes
+- ✅ **DO**: Use consistent tool versions (defined in Makefile/Dockerfile)
+- ✅ **DO**: Run `make gen` in CI to verify files are up-to-date
+- ❌ **DON'T**: Edit generated files manually (changes will be overwritten)
+- ❌ **DON'T**: Commit source changes without regenerating
+
+### CI Verification
+
+Add a CI step to ensure generated files are up-to-date:
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  verify-generated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24'
+
+      - name: Install generation tools
+        run: |
+          go install github.com/google/wire/cmd/wire@latest
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Regenerate all code
+        run: make gen
+
+      - name: Check for uncommitted changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "❌ Generated files are out of date. Run 'make gen' and commit the changes."
+            git diff
+            exit 1
+          fi
+          echo "✅ All generated files are up to date"
+```
+
+### Makefile Integration
+
+Ensure your `Makefile` has a `gen` target that regenerates all code:
+
+```makefile
+.PHONY: gen
+gen: wire-gen proto-gen mock-gen ## Regenerate all generated code
+
+.PHONY: wire-gen
+wire-gen: ## Regenerate Wire dependency injection code
+	@echo "Generating Wire code..."
+	@command -v wire >/dev/null 2>&1 || go install github.com/google/wire/cmd/wire@latest
+	wire gen ./internal/app
+
+.PHONY: proto-gen
+proto-gen: ## Generate Go code from proto files
+	@echo "Generating protobuf code..."
+	@command -v protoc-gen-go >/dev/null 2>&1 || go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+	@command -v protoc-gen-go-grpc >/dev/null 2>&1 || go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	protoc --go_out=. --go_opt=paths=source_relative \
+		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
+		api/proto/**/*.proto
+
+.PHONY: mock-gen
+mock-gen: ## Generate mocks for testing
+	@echo "Generating mocks..."
+	@command -v mockery >/dev/null 2>&1 || go install github.com/vektra/mockery/v2@latest
+	mockery --dir=internal/usecase/port --all --output=internal/usecase/port/mocks
+```
+
+### When NOT to Commit Generated Code
+
+Only skip committing generated files if:
+- ✅ Your team uses **mandatory** Dev Containers with consistent tooling
+- ✅ Your CI pipeline is **extremely fast** at code generation
+- ✅ Generated files are **very large** (hundreds of MB) and impact Git performance
+- ✅ Your project is **not used as a library** by other Go projects
+
+For most projects, **committing generated code is the right choice**.
 
 ---
 
