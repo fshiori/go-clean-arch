@@ -588,6 +588,11 @@ func (r *UserRepositorySQLX) FindByEmail(ctx context.Context, email string) (*do
 - ❌ **DON'T**: Put business logic in handlers
 - ❌ **DON'T**: Access repositories directly
 
+> **Framework Agnostic Design (2025):**
+> While this project uses **Gin** for its maturity and ecosystem, the Clean Architecture design allows us to swap the delivery mechanism easily.
+>
+> With the release of **Go 1.22+**, the standard library's `net/http` router has become powerful enough for many services. For new microservices requiring minimal dependencies, teams are encouraged to evaluate standard **`http.ServeMux`** or **Chi** as lightweight alternatives, provided they adhere to the same Handler/DTO patterns defined here.
+
 **Example**:
 ```go
 // ✅ Good: DTO with validation tags
