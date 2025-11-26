@@ -1,8 +1,14 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+**For LLM Context** - This file provides quick reference for AI assistants working with this codebase.
 
-## Commands
+For human developers, see:
+- User documentation: [README.md](README.md)
+- Coding standards: [CODING_STANDARDS.md](CODING_STANDARDS.md)
+
+---
+
+## Quick Commands
 
 ### Development
 ```bash
@@ -10,8 +16,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 go run cmd/app/main.go --mode=api       # Start API server on :8080
 go run cmd/app/main.go --mode=worker    # Start message queue worker
 go run cmd/app/main.go --mode=cron      # Start cron scheduler
+./app micro                             # Start microservice mode on :8081
 
-# Or use Makefile shortcuts
+# Makefile shortcuts
 make run-api
 make run-worker
 make run-cron
@@ -34,7 +41,7 @@ make vet                 # Run go vet
 ### Building
 ```bash
 make build               # Build for current platform → bin/go-clean-arch
-make build-all           # Cross-compile for Linux, macOS (amd64/arm64), Windows
+make build-all           # Cross-compile for multiple platforms
 ```
 
 ### Dependency Injection (Wire)
@@ -43,92 +50,145 @@ make build-all           # Cross-compile for Linux, macOS (amd64/arm64), Windows
 wire gen ./internal/app
 ```
 
-## Architecture
+---
+
+## Critical Context ⚠️
+
+### Known Issues
+1. **SECURITY**: Password hashing is insecure (`internal/domain/user.go:67-74`)
+   - Currently uses `"hashed_" + password` prefix
+   - Must replace with bcrypt/argon2 before production
+
+2. **ARCHITECTURE**: GatewaySet missing in API mode
+   - `InitializeAPIRouter()` doesn't include `GatewaySet` (`internal/app/wire.go:66-75`)
+   - PaymentGateway unavailable in API mode
+   - Worker and Cron modes correctly include it
+
+3. **DOMAIN**: Entity reconstruction issue
+   - Repositories cannot properly hydrate User entities with password hash
+   - Need `ReconstructUser()` factory method to maintain encapsulation
+
+4. **LIFECYCLE**: No graceful shutdown implemented yet
+   - Must implement signal handling for SIGTERM/SIGINT
+   - Critical for Twelve-Factor compliance (Factor IX)
+
+5. **TESTING**: No tests exist yet
+   - Need to implement tests for all layers
+
+### Tech Stack
+- **Go**: 1.24+
+- **HTTP Framework**: Gin
+- **ORM**: GORM (PostgreSQL, MySQL, SQLite)
+- **Dependency Injection**: Wire (compile-time)
+- **Configuration**: Viper (YAML + env vars)
+- **Logging**: slog (structured logging with trace IDs)
+- **Microservices**: go-micro v5
+- **Message Queue**: RabbitMQ (optional)
+- **Cron**: robfig/cron
+
+---
+
+## Architecture Quick Reference
 
 ### Clean Architecture Layers (Dependency Flow: Outer → Inner)
 
 ```
 ┌─────────────────────────────────────────┐
-│  Delivery (cmd/, internal/delivery/)    │  ← HTTP handlers, Workers, Cron jobs
+│  Delivery (internal/delivery/)          │  ← HTTP, Worker, Cron, Microservice
 │  - Converts DTOs ↔ Domain entities      │
 │  - Request validation, error mapping    │
+│  Examples:                              │
+│    internal/delivery/http/handler/      │
+│    internal/delivery/consumer/          │
+│    internal/delivery/job/               │
+│    internal/delivery/micro/handler/     │
 └──────────────┬──────────────────────────┘
                │
 ┌──────────────▼──────────────────────────┐
 │  Use Cases (internal/usecase/)          │  ← Application business logic
 │  - Orchestrates domain logic            │
 │  - Defines ports (interfaces)           │
+│  Examples:                              │
+│    internal/usecase/user_interactor.go  │
+│    internal/usecase/port/               │
 └──────────────┬──────────────────────────┘
                │
 ┌──────────────▼──────────────────────────┐
 │  Adapters (internal/adapter/)           │  ← Repository & Gateway implementations
 │  - Converts Domain ↔ DB models          │
 │  - External API integrations            │
+│  Examples:                              │
+│    internal/adapter/repository/         │
+│    internal/adapter/gateway/            │
 └──────────────┬──────────────────────────┘
                │
 ┌──────────────▼──────────────────────────┐
 │  Domain (internal/domain/)              │  ← Pure business entities & rules
 │  - NO external dependencies             │
 │  - Rich domain models, not anemic       │
+│  Examples:                              │
+│    internal/domain/user.go              │
+│    internal/domain/order.go             │
 └─────────────────────────────────────────┘
 ```
 
 ### Key Architectural Decisions
 
-**1. Interface Location: `internal/usecase/port/`**
-- Use cases define the interfaces they need (ports)
-- Repositories and gateways implement these interfaces
-- This is pragmatic for most applications and keeps domain pure
+1. **Interfaces in `internal/usecase/port/`** (not domain)
+   - Use cases define the interfaces they need
+   - Keeps domain pure and focused on business rules
 
-**2. Single Binary, Multiple Runtime Modes**
-- One codebase compiles to one binary
-- Mode selected via CLI flag: `--mode=api|worker|cron`
-- Shared business logic across all modes
-- Cobra CLI framework handles commands
+2. **Single binary, multiple runtime modes**
+   - Mode selected via CLI flag: `--mode=api|worker|cron|micro`
+   - Shared business logic across all modes
+   - Cobra CLI framework handles commands
 
-**3. Data Transformation Strategy**
-- **Domain entities** remain pure (no JSON/DB tags)
-- **HTTP layer**: DTOs ↔ Domain (in handlers)
-- **Repository layer**: Domain ↔ DB models (in repository)
-- Each layer owns its transformation logic
+3. **Pure domain entities** (no infrastructure tags)
+   - Domain entities have no JSON/GORM tags
+   - DTOs handle JSON serialization
+   - DB models handle GORM mappings
 
-**4. Wire Dependency Injection**
-- `internal/app/wire.go` defines provider sets
-- `wire_gen.go` is auto-generated (don't edit manually)
-- Different injector functions for each mode:
-  - `InitializeAPIRouter()` - API mode
-  - `InitializeWorker()` - Worker mode
-  - `InitializeCronScheduler()` - Cron mode
-- NOTE: API mode currently missing `GatewaySet` (see TODO.md)
+4. **Wire dependency injection** (compile-time)
+   - `internal/app/wire.go` defines provider sets
+   - `wire_gen.go` is auto-generated (DON'T edit manually)
+   - Run `wire gen ./internal/app` after changes
 
-**5. Structured Logging with Trace ID**
-- Uses Go's `log/slog` for structured logging
-- Trace IDs propagate through requests via context
-- Middleware auto-injects trace IDs from `X-Trace-ID` header or generates UUID
-- Use context-aware logging: `logger.InfoContext(ctx, "msg", "key", value)`
+5. **Twelve-Factor App compliant**
+   - Config via environment variables (Factor III)
+   - Config files are OPTIONAL (for local dev only)
+   - Graceful shutdown required (Factor IX)
+   - Logs to stdout (Factor XI)
+
+---
 
 ## Adding New Features
 
-### Example: Adding a New Entity (e.g., "Product")
+### Standard 7-Step Process
+
+**Example**: Adding a "Product" entity
 
 **Step 1: Domain Layer**
 ```go
 // internal/domain/product.go
 type Product struct {
-    id          int64
-    name        string
-    price       int64
-    createdAt   time.Time
+    ID        int64
+    Name      string
+    Price     int64
+    CreatedAt time.Time
+    UpdatedAt time.Time
 }
-// Add business logic methods (validation, state transitions)
+
+func NewProduct(name string, price int64) (*Product, error) {
+    // Validation and business rules
+}
 ```
 
 **Step 2: Define Repository Interface**
 ```go
 // internal/usecase/port/product_repository.go
 type ProductRepository interface {
-    Create(product *domain.Product) error
-    FindByID(id int64) (*domain.Product, error)
+    Save(ctx context.Context, product *domain.Product) error
+    FindByID(ctx context.Context, id int64) (*domain.Product, error)
 }
 ```
 
@@ -141,22 +201,26 @@ type ProductModel struct {
     Price     int64     `gorm:"not null"`
     CreatedAt time.Time `gorm:"autoCreateTime"`
 }
-// Add conversion methods: ToModel(), ToDomain()
+
+func (m *ProductModel) ToDomain() *domain.Product { ... }
+func ToProductModel(p *domain.Product) *ProductModel { ... }
 ```
 
 ```go
 // internal/adapter/repository/product_repository_gorm.go
-type ProductRepositoryGorm struct {
+type ProductRepositoryGORM struct {
     db *gorm.DB
 }
-// Implement ProductRepository interface
+
+func NewProductRepository(db *gorm.DB) *ProductRepositoryGORM { ... }
+func (r *ProductRepositoryGORM) Save(ctx context.Context, product *domain.Product) error { ... }
 ```
 
 **Step 4: Create Use Case**
 ```go
 // internal/usecase/interfaces.go - Add interface
 type ProductUsecase interface {
-    CreateProduct(name string, price int64) (*domain.Product, error)
+    CreateProduct(ctx context.Context, name string, price int64) (*domain.Product, error)
 }
 ```
 
@@ -165,7 +229,9 @@ type ProductUsecase interface {
 type ProductInteractor struct {
     productRepo port.ProductRepository
 }
-// Implement ProductUsecase methods
+
+func NewProductInteractor(productRepo port.ProductRepository) *ProductInteractor { ... }
+func (i *ProductInteractor) CreateProduct(ctx context.Context, name string, price int64) (*domain.Product, error) { ... }
 ```
 
 **Step 5: Add HTTP Handler**
@@ -175,6 +241,13 @@ type CreateProductRequest struct {
     Name  string `json:"name" binding:"required"`
     Price int64  `json:"price" binding:"required,min=0"`
 }
+
+type ProductResponse struct {
+    ID        int64     `json:"id"`
+    Name      string    `json:"name"`
+    Price     int64     `json:"price"`
+    CreatedAt time.Time `json:"created_at"`
+}
 ```
 
 ```go
@@ -182,120 +255,240 @@ type CreateProductRequest struct {
 type ProductHandler struct {
     productUC usecase.ProductUsecase
 }
-// Implement handlers (Create, Get, List, etc.)
+
+func NewProductHandler(productUC usecase.ProductUsecase) *ProductHandler { ... }
+func (h *ProductHandler) Create(c *gin.Context) { ... }
 ```
 
 **Step 6: Register Routes**
 ```go
 // internal/delivery/http/router.go
-v1.POST("/products", productHandler.Create)
-v1.GET("/products/:id", productHandler.GetByID)
+v1 := router.Group("/api/v1")
+{
+    v1.POST("/products", productHandler.Create)
+    v1.GET("/products/:id", productHandler.GetByID)
+}
 ```
 
 **Step 7: Wire Dependencies**
 ```go
 // internal/app/wire.go
+
 // Add to RepositorySet:
-repository.NewProductRepository,
+var RepositorySet = wire.NewSet(
+    repository.NewUserRepository,
+    repository.NewProductRepository,  // ← Add this
+    wire.Bind(new(port.UserRepository), new(*repository.UserRepositoryGORM)),
+    wire.Bind(new(port.ProductRepository), new(*repository.ProductRepositoryGORM)),  // ← Add this
+)
 
 // Add to UseCaseSet:
-usecase.NewProductInteractor,
-wire.Bind(new(usecase.ProductUsecase), new(*usecase.ProductInteractor)),
+var UseCaseSet = wire.NewSet(
+    usecase.NewUserInteractor,
+    usecase.NewProductInteractor,  // ← Add this
+    wire.Bind(new(usecase.UserUsecase), new(*usecase.UserInteractor)),
+    wire.Bind(new(usecase.ProductUsecase), new(*usecase.ProductInteractor)),  // ← Add this
+)
 
 // Add to HandlerSet:
-handler.NewProductHandler,
+var HandlerSet = wire.NewSet(
+    handler.NewUserHandler,
+    handler.NewProductHandler,  // ← Add this
+)
 ```
 
-Then run `wire gen ./internal/app` to regenerate Wire code.
+Then run:
+```bash
+wire gen ./internal/app
+```
+
+---
+
+## File Naming Conventions
+
+| Component | File Path | Naming Pattern |
+|-----------|-----------|----------------|
+| Domain Entity | `internal/domain/{entity}.go` | `user.go`, `order.go` |
+| Domain Errors | `internal/domain/errors.go` | Single file for all errors |
+| Repository Interface | `internal/usecase/port/{entity}_repository.go` | `user_repository.go` |
+| Gateway Interface | `internal/usecase/port/{service}_gateway.go` | `payment_gateway.go` |
+| Use Case Interface | `internal/usecase/interfaces.go` | Single file for all interfaces |
+| Use Case Implementation | `internal/usecase/{entity}_interactor.go` | `user_interactor.go` |
+| Repository Implementation | `internal/adapter/repository/{entity}_repository_gorm.go` | `user_repository_gorm.go` |
+| DB Model | `internal/adapter/repository/{entity}_model.go` | `user_model.go` |
+| Gateway Implementation | `internal/adapter/gateway/{service}_gateway.go` | `stripe_gateway.go` |
+| HTTP Handler | `internal/delivery/http/handler/{entity}_handler.go` | `user_handler.go` |
+| HTTP DTO | `internal/delivery/http/handler/{entity}_dto.go` | `user_dto.go` |
+| Worker Consumer | `internal/delivery/consumer/{entity}_consumer.go` | `order_consumer.go` |
+| Cron Job | `internal/delivery/job/{job_name}_job.go` | `daily_report_job.go` |
+| Microservice Handler | `internal/delivery/micro/handler/{entity}_service.go` | `user_service.go` |
+| Test File | `{filename}_test.go` | `user_test.go` |
+
+---
+
+## Common Pitfalls
+
+### Architecture Violations
+- ❌ **DON'T** import `adapter` or `delivery` in `usecase` layer
+- ❌ **DON'T** import any other layer in `domain` layer
+- ❌ **DON'T** add JSON/GORM tags to domain entities
+- ❌ **DON'T** put business logic in handlers (keep them thin)
+- ❌ **DON'T** access repositories directly in handlers
+
+### Wire DI
+- ❌ **DON'T** edit `wire_gen.go` manually (it's auto-generated)
+- ⚠️ **REMEMBER** to run `wire gen ./internal/app` after changing `wire.go`
+- ⚠️ **REMEMBER** to add interface bindings: `wire.Bind(new(Interface), new(*Implementation))`
+
+### Configuration
+- ❌ **DON'T** require config files in production
+- ✅ **DO** support environment-only deployment (Twelve-Factor)
+- ✅ **DO** use `APP_` prefix for environment variables
+- ✅ **DO** provide `config.example.toml` for local dev
+
+### Security
+- ⚠️ **CRITICAL**: Current password hashing is insecure
+- ❌ **DON'T** commit secrets in config files
+- ❌ **DON'T** log sensitive data (passwords, tokens)
+
+### Context Propagation
+- ✅ **DO** accept `context.Context` as first parameter in use cases
+- ✅ **DO** propagate context to repositories
+- ✅ **DO** use `logger.InfoContext(ctx, ...)` for trace ID propagation
+
+### Error Handling
+- ✅ **DO** define domain errors in `internal/domain/errors.go`
+- ✅ **DO** wrap errors with context: `fmt.Errorf("operation failed: %w", err)`
+- ✅ **DO** use `errors.Is()` for error checking
+
+---
+
+## Testing Guidelines
+
+### Coverage Targets
+- **Domain layer**: 90%+ coverage (focus on business logic)
+- **Use case layer**: 90%+ coverage (mock repositories)
+- **Repository layer**: 80%+ coverage (integration tests)
+- **Handler layer**: 70%+ coverage (mock use cases)
+
+### Testing Strategy
+- **Domain**: Test business logic in isolation (no dependencies)
+- **Use Case**: Mock repositories (interfaces in `usecase/port/`)
+- **Repository**: Integration tests with test database
+- **Handler**: Mock use cases, test request/response mapping
+
+### Current Status
+- ⚠️ **No tests exist yet** - need to implement tests for all layers
+
+---
 
 ## Configuration
 
-- **Config file**: `configs/config.yaml` (NOTE: There's inconsistency between `.yaml` and `.toml` - currently using YAML)
-- **Viper** loads config with environment variable override support
-- **Environment variables**: Override config with format `APP_DATABASE_HOST=localhost`
-- **Config structure**: See `pkg/config/config.go`
+### Environment Variables (Recommended)
+```bash
+# All config via environment variables (Twelve-Factor compliant)
+export APP_SERVER_PORT=8080
+export APP_DATABASE_HOST=localhost
+export APP_DATABASE_USER=postgres
+export APP_DATABASE_PASSWORD=secret
+export APP_LOGGER_LEVEL=info
 
-### Database Configuration
-- Supports PostgreSQL, MySQL, SQLite
-- Auto-migration enabled by default in config
-- Connection pooling hardcoded in `internal/adapter/repository/db.go:68-70` (should be configurable)
+# Run without config file
+./app api
+```
 
-## Critical Issues (See TODO.md for full list)
+### Config File (Optional, for local dev)
+```bash
+# Copy example config
+cp configs/config.example.toml configs/config.toml
 
-### Security
-⚠️ **CRITICAL**: Password hashing is insecure (`internal/domain/user.go:67-74`)
-- Currently uses `"hashed_" + password` prefix
-- Must replace with bcrypt/argon2 before production
+# Run with config file
+./app api --config=configs/config.toml
+```
 
-### Missing in API Mode
-- `GatewaySet` not included in `InitializeAPIRouter()` (`internal/app/wire.go:66-75`)
-- PaymentGateway unavailable in API mode
-- Worker and Cron modes correctly include it
+### Naming Convention
+- Prefix: `APP_`
+- Nested keys use underscore: `database.host` → `APP_DATABASE_HOST`
+- All uppercase
 
-### Domain Entity Reconstruction
-- Repositories cannot properly hydrate User entities with password hash
-- Need `ReconstructUser()` factory method to maintain encapsulation
+---
 
-## Testing Strategy
+## Logging
 
-When writing tests:
-- **Domain layer**: Test business logic in isolation
-- **Use case layer**: Mock repositories (interfaces in `usecase/port/`)
-- **Repository layer**: Integration tests with test database
-- **Handler layer**: Mock use cases, test request/response mapping
-
-Current status: No tests exist yet (see TODO.md)
-
-## Common Patterns
-
-### Error Handling
-Current: Uses `errors.New()` and basic error wrapping
-Recommended: Define domain error types (e.g., `ErrUserNotFound`, `ErrEmailAlreadyExists`)
-
-### Context Propagation
-- Use cases should accept `context.Context` as first parameter
-- Enables timeout, cancellation, and trace ID propagation
-- Currently missing from interface signatures
-
-### Logging
+### Structured Logging with Trace IDs
 ```go
-// In handlers and use cases
+// Use context-aware logging for trace ID propagation
 logger.InfoContext(ctx, "Creating user", "email", email)
 logger.ErrorContext(ctx, "Failed to save", "error", err)
 ```
 
-### DTOs vs Domain
-- DTOs have JSON binding tags (Gin validation)
-- Domain entities are tag-free
-- Always convert at layer boundaries:
-  ```go
-  domainUser := dto.ToDomain()      // In handler
-  response := dto.FromDomain(user)  // In handler
-  ```
+### Log Levels
+- **DEBUG**: Detailed debugging information
+- **INFO**: General informational messages
+- **WARN**: Warning messages
+- **ERROR**: Error messages
 
-## Known Gaps
-
-1. No graceful shutdown implementation
-2. No custom error types (all errors are generic)
-3. OrderHandler not implemented (routes commented out)
-4. Message queue consumer skeleton only
-5. No database migrations tooling (golang-migrate/goose)
-6. No OpenAPI/Swagger documentation
-7. Health check endpoint doesn't verify dependencies
+---
 
 ## Runtime Modes
 
-### API Mode (`--mode=api`)
-- Starts Gin HTTP server on configured port
+| Mode | Command | Port | Purpose |
+|------|---------|------|---------|
+| API | `./app api` | 8080 | HTTP REST API server |
+| Worker | `./app worker` | - | Message queue consumer |
+| Cron | `./app cron` | - | Scheduled jobs |
+| Microservice | `./app micro` | 8081 | go-micro RPC service |
+
+### Mode-Specific Notes
+
+**API Mode**:
 - Serves REST API endpoints
 - Health check: `GET /health`
+- ⚠️ Missing GatewaySet in wire config
 
-### Worker Mode (`--mode=worker`)
+**Worker Mode**:
 - Consumes messages from RabbitMQ
 - Currently skeleton implementation
-- Processes order events
 
-### Cron Mode (`--mode=cron`)
+**Cron Mode**:
 - Runs scheduled jobs using robfig/cron
 - Daily report job configured
-- Currently generates placeholder reports
+
+**Microservice Mode**:
+- Uses go-micro v5 for RPC communication
+- Service discovery and load balancing
+- HTTP transport available by default
+
+---
+
+## Data Transformation Strategy
+
+### Transformation at Layer Boundaries
+
+```
+HTTP Request (JSON)
+    ↓ [Handler Layer]
+DTO (with JSON tags)
+    ↓ [Handler converts to Domain]
+Domain Entity (pure, no tags)
+    ↓ [Use Case Layer]
+Domain Entity (unchanged)
+    ↓ [Repository converts to Model]
+DB Model (with GORM tags)
+    ↓ [Database]
+```
+
+### Key Points
+- **Domain entities** remain pure (no JSON/DB tags)
+- **DTOs** handle JSON serialization (in delivery layer)
+- **DB models** handle GORM mappings (in adapter layer)
+- Each layer owns its transformation logic
+
+---
+
+## References
+
+For detailed information, see:
+- **Full coding standards**: [CODING_STANDARDS.md](CODING_STANDARDS.md)
+- **User documentation**: [README.md](README.md)
+- **Twelve-Factor compliance**: [CODING_STANDARDS.md#twelve-factor-app-compliance](CODING_STANDARDS.md#twelve-factor-app-compliance)

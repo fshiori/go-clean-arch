@@ -3,6 +3,12 @@
 **Version**: 1.1
 **Last Updated**: 2025-11-20
 
+> **For AI assistants**: See [CLAUDE.md](CLAUDE.md) for a quick reference guide.
+>
+> **For project overview**: See [README.md](README.md) for installation and getting started.
+>
+> This document contains comprehensive coding standards for human contributors.
+
 ## Table of Contents
 
 1. [Introduction](#introduction)

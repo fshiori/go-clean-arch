@@ -1,6 +1,9 @@
 # Go Clean Architecture
 
-A production-ready Go application implementing Clean Architecture principles with support for multiple runtime modes (API, Worker, Cron).
+A production-ready Go application implementing Clean Architecture principles with support for multiple runtime modes (API, Worker, Cron, Microservice).
+
+> **For AI assistants**: See [CLAUDE.md](CLAUDE.md)
+> **For contributors**: See [CODING_STANDARDS.md](CODING_STANDARDS.md)
 
 ## ✨ Highlights
 
@@ -80,64 +83,7 @@ This project follows Clean Architecture and Standard Go Project Layout principle
 - **Single Responsibility**: Each layer has a clear purpose
 - **Testability**: Easy to mock and test each layer
 
-## Project Structure
-
-```
-.
-├── cmd/                    # Application entry points
-│   └── app/
-│       └── main.go         # Main application with mode switching
-├── internal/               # Private application code
-│   ├── app/                # Application bootstrappers
-│   │   ├── api.go          # API server setup
-│   │   ├── worker.go       # Worker setup
-│   │   └── cron.go         # Cron scheduler setup
-│   ├── domain/             # Domain entities and business rules
-│   │   ├── user.go
-│   │   └── order.go
-│   ├── usecase/            # Application business logic
-│   │   ├── port/           # Port/Interface definitions
-│   │   │   ├── user_repository.go
-│   │   │   ├── order_repository.go
-│   │   │   └── payment_gateway.go
-│   │   ├── user_interactor.go
-│   │   └── order_interactor.go
-│   ├── adapter/            # Adapter/Implementation layer
-│   │   ├── repository/     # Data access implementations
-│   │   │   ├── user_repository_gorm.go
-│   │   │   ├── order_repository_gorm.go
-│   │   │   └── db.go
-│   │   └── gateway/        # External API clients
-│   │       └── stripe_gateway.go
-│   └── delivery/           # Delivery mechanisms
-│       ├── http/           # HTTP handlers
-│       │   ├── handler/
-│       │   │   ├── user_handler.go
-│       │   │   └── user_dto.go
-│       │   └── router.go
-│       ├── consumer/       # Message queue consumers
-│       │   └── order_consumer.go
-│       ├── job/            # Cron jobs
-│       │   └── daily_report_job.go
-│       └── micro/          # Microservice RPC handlers
-│           └── handler/
-│               └── user_service_simple.go
-├── pkg/                    # Public shared libraries
-│   ├── config/
-│   │   └── config.go
-│   └── logger/
-│       └── logger.go
-├── configs/                # Configuration files
-│   └── config.yaml
-├── scripts/                # Build and deployment scripts
-├── docs/                   # Documentation
-├── api/                    # API definitions (OpenAPI/Swagger)
-├── go.mod
-├── go.sum
-├── Makefile
-├── Dockerfile
-└── README.md
-```
+For detailed architecture documentation, see [CODING_STANDARDS.md](CODING_STANDARDS.md).
 
 ## Running the Application
 
@@ -156,6 +102,9 @@ cd go-clean-arch
 
 # Install dependencies
 go mod download
+
+# Build
+make build
 ```
 
 ### Configuration
@@ -193,7 +142,7 @@ This application follows [Twelve-Factor App](https://12factor.net/) methodology:
 - ✅ Easy Kubernetes/Docker deployment
 - ✅ Environment-specific configuration
 
-See [docs/TWELVE_FACTOR_COMPLIANCE.md](docs/TWELVE_FACTOR_COMPLIANCE.md) for details.
+See [CODING_STANDARDS.md#twelve-factor-app-compliance](CODING_STANDARDS.md#twelve-factor-app-compliance) for details.
 
 ### Database Migrations
 
@@ -220,7 +169,11 @@ Run migrations before starting the application:
 #### API Server Mode
 
 ```bash
-go run cmd/app/main.go --mode=api
+# Start API server
+./app api
+
+# With custom port
+./app api --port 9090
 ```
 
 The API server will start on `http://localhost:8080`
@@ -228,7 +181,8 @@ The API server will start on `http://localhost:8080`
 #### Worker Mode
 
 ```bash
-go run cmd/app/main.go --mode=worker
+# Start message queue worker
+./app worker
 ```
 
 The worker will start consuming messages from the message queue.
@@ -236,7 +190,8 @@ The worker will start consuming messages from the message queue.
 #### Cron Scheduler Mode
 
 ```bash
-go run cmd/app/main.go --mode=cron
+# Start cron scheduler
+./app cron
 ```
 
 The cron scheduler will start and run scheduled jobs.
@@ -244,14 +199,11 @@ The cron scheduler will start and run scheduled jobs.
 #### Microservice Mode
 
 ```bash
-# Start with default settings (service name: go.micro.service.user, address: :8081)
+# Start with default settings
 ./app micro
 
 # Start with custom settings
 ./app micro --service-name user.service --version v1.0.0 --address :8082
-
-# With config file
-./app micro --config configs/config.toml
 ```
 
 The microservice uses **go-micro v5** framework for RPC communication. It provides service discovery, load balancing, and pluggable transports out of the box.
@@ -263,80 +215,15 @@ The microservice uses **go-micro v5** framework for RPC communication. It provid
 - ✅ Handler-based RPC with automatic serialization
 - ✅ Clean architecture maintained
 
-**Available RPC Methods:**
-
-The service exposes the following RPC methods via go-micro:
-
-- `UserServiceSimple.CreateUser` - Create a new user
-- `UserServiceSimple.GetUser` - Get user by ID
-- `UserServiceSimple.ListUsers` - List users (with pagination)
-- `UserServiceSimple.UpdatePassword` - Update user password
-- `UserServiceSimple.DeleteUser` - Delete user
-
-**Calling the Microservice:**
-
-Using go-micro client:
-
-```go
-package main
-
-import (
-    "context"
-    "fmt"
-    "go-micro.dev/v5"
-    "go-micro.dev/v5/client"
-)
-
-type CreateUserReq struct {
-    Email    string `json:"email"`
-    Password string `json:"password"`
-}
-
-type CreateUserRsp struct {
-    ID        int64  `json:"id"`
-    Email     string `json:"email"`
-    CreatedAt string `json:"created_at"`
-    UpdatedAt string `json:"updated_at"`
-}
-
-func main() {
-    service := micro.NewService()
-    service.Init()
-
-    req := &CreateUserReq{
-        Email:    "user@example.com",
-        Password: "secret123",
-    }
-    rsp := &CreateUserRsp{}
-
-    err := service.Client().Call(
-        context.Background(),
-        service.Client().NewRequest(
-            "go.micro.service.user",
-            "UserServiceSimple.CreateUser",
-            req,
-        ),
-        rsp,
-    )
-
-    if err != nil {
-        fmt.Println("Error:", err)
-        return
-    }
-
-    fmt.Printf("Created user: %+v\n", rsp)
-}
-```
-
 **Using HTTP transport:**
-
-go-micro v5 supports HTTP by default:
 
 ```bash
 curl -X POST http://localhost:8081/UserServiceSimple/CreateUser \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"secret123"}'
 ```
+
+For detailed microservice integration, see [CODING_STANDARDS.md#microservices-delivery-layer](CODING_STANDARDS.md#microservices-delivery-layer).
 
 ### Building
 
@@ -361,16 +248,26 @@ make lint
 docker build -t go-clean-arch:latest .
 
 # Run API mode
-docker run -p 8080:8080 go-clean-arch:latest api
+docker run -p 8080:8080 \
+  -e APP_DATABASE_HOST=host.docker.internal \
+  -e APP_DATABASE_PASSWORD=secret \
+  go-clean-arch:latest api
 
 # Run Worker mode
-docker run go-clean-arch:latest worker
+docker run \
+  -e APP_DATABASE_HOST=host.docker.internal \
+  -e APP_RABBITMQ_HOST=host.docker.internal \
+  go-clean-arch:latest worker
 
 # Run Cron mode
-docker run go-clean-arch:latest cron
+docker run \
+  -e APP_DATABASE_HOST=host.docker.internal \
+  go-clean-arch:latest cron
 
 # Run Microservice mode
-docker run -p 8081:8081 go-clean-arch:latest micro --address :8081
+docker run -p 8081:8081 \
+  -e APP_DATABASE_HOST=host.docker.internal \
+  go-clean-arch:latest micro --address :8081
 ```
 
 ## API Endpoints
@@ -387,26 +284,44 @@ docker run -p 8081:8081 go-clean-arch:latest micro --address :8081
 
 - `GET /health` - Health check endpoint
 
+### Example Requests
+
+```bash
+# Create user
+curl -X POST http://localhost:8080/api/v1/users \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"secret123"}'
+
+# Get user
+curl http://localhost:8080/api/v1/users/1
+
+# List users
+curl http://localhost:8080/api/v1/users?page=1&page_size=10
+```
+
 ## Development
 
 ### Adding a New Feature
 
-1. **Define Domain Entity** in `internal/domain/`
-2. **Define Repository Interface** in `internal/usecase/port/`
-3. **Implement Repository** in `internal/interface/repository/`
-4. **Create Use Case** in `internal/usecase/`
-5. **Add HTTP Handler** in `internal/delivery/http/handler/`
-6. **Register Routes** in `internal/delivery/http/router.go`
-7. **Wire Dependencies** in `internal/app/api.go`
+For detailed step-by-step guide, see [CLAUDE.md#adding-new-features](CLAUDE.md#adding-new-features) or [CODING_STANDARDS.md#clean-architecture-layers](CODING_STANDARDS.md#clean-architecture-layers).
+
+Quick overview:
+1. Define domain entity in `internal/domain/`
+2. Define repository interface in `internal/usecase/port/`
+3. Implement repository in `internal/adapter/repository/`
+4. Create use case in `internal/usecase/`
+5. Add HTTP handler in `internal/delivery/http/handler/`
+6. Register routes in `internal/delivery/http/router.go`
+7. Wire dependencies in `internal/app/wire.go`
 
 ### Testing
 
 ```bash
 # Run all tests
-go test ./...
+make test
 
 # Run tests with coverage
-go test -cover ./...
+make test-coverage
 
 # Run tests for a specific package
 go test ./internal/usecase/...
@@ -416,24 +331,28 @@ go test ./internal/usecase/...
 
 ```bash
 # Format code
-go fmt ./...
+make fmt
 
 # Run linter
-golangci-lint run
+make lint
 
-# Run tests
-go test ./...
+# Run static analysis
+make vet
 ```
 
-## Design Decisions
+## Documentation
 
-### Why Interfaces in usecase/port?
+- [CLAUDE.md](CLAUDE.md) - Quick reference for AI assistants
+- [CODING_STANDARDS.md](CODING_STANDARDS.md) - Comprehensive coding standards
+- [TWELVE_FACTOR_ASSESSMENT.md](docs/TWELVE_FACTOR_ASSESSMENT.md) - Twelve-Factor compliance details
 
-Following the discussion in the Gemini conversation, interfaces are placed in the `usecase/port` directory because:
-- Use cases define what capabilities they need
-- This is more pragmatic for most applications
-- It keeps the domain layer clean and focused on business rules
-- It's easier to understand and maintain
+## Design Philosophy
+
+This project follows:
+- **Clean Architecture** by Robert C. Martin
+- **Standard Go Project Layout**
+- **Twelve-Factor App** methodology
+- **Domain-Driven Design** principles
 
 ### Why Single Binary, Multiple Modes?
 
@@ -448,10 +367,41 @@ Following the discussion in the Gemini conversation, interfaces are placed in th
 2. **Domain Entity** ↔ **DTO**: Transformed in HTTP Handler layer
 3. **Domain remains pure**: No database or JSON tags
 
+For detailed design decisions, see [CODING_STANDARDS.md](CODING_STANDARDS.md).
+
+## Technology Stack
+
+- **Language**: Go 1.24+
+- **HTTP Framework**: Gin
+- **ORM**: GORM
+- **Dependency Injection**: Wire (compile-time)
+- **Configuration**: Viper
+- **Logging**: slog (structured logging)
+- **Microservices**: go-micro v5
+- **Message Queue**: RabbitMQ
+- **Cron**: robfig/cron
+
+## Contributing
+
+Please read [CODING_STANDARDS.md](CODING_STANDARDS.md) for details on our coding standards and the process for submitting pull requests.
+
+### Quick Contribution Checklist
+
+- [ ] Follow Clean Architecture principles
+- [ ] Write tests (90%+ coverage for domain/use case layers)
+- [ ] Use structured logging with context
+- [ ] Support environment-only deployment
+- [ ] Implement graceful shutdown
+- [ ] Format code with `make fmt`
+- [ ] Pass linter checks with `make lint`
+
 ## License
 
 MIT
 
-## Contributing
+## Support
 
-Please read CONTRIBUTING.md for details on our code of conduct and the process for submitting pull requests.
+For questions or issues:
+- Open an issue on GitHub
+- Check [CLAUDE.md](CLAUDE.md) for common patterns
+- Review [CODING_STANDARDS.md](CODING_STANDARDS.md) for detailed guidelines
