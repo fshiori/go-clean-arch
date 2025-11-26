@@ -325,11 +325,11 @@ func getMigrationFiles() ([]string, error) {
 	return migrations, nil
 }
 
-func applyMigration(db *sqlx.DB, filename string) error {
+func applyMigration(db *sqlx.DB, filename string) (err error) {
 	// Read migration file
-	content, err := os.ReadFile(filepath.Join("migrations", filename))
-	if err != nil {
-		return fmt.Errorf("failed to read migration file: %w", err)
+	content, readErr := os.ReadFile(filepath.Join("migrations", filename))
+	if readErr != nil {
+		return fmt.Errorf("failed to read migration file: %w", readErr)
 	}
 
 	// Begin transaction
@@ -337,20 +337,29 @@ func applyMigration(db *sqlx.DB, filename string) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+
+	// Ensure rollback on panic or error
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p) // Re-throw panic after rollback
+		} else if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
 
 	// Execute migration
-	if _, err := tx.Exec(string(content)); err != nil {
+	if _, err = tx.Exec(string(content)); err != nil {
 		return fmt.Errorf("failed to execute migration: %w", err)
 	}
 
 	// Record migration
-	if _, err := tx.Exec("INSERT INTO schema_migrations (filename) VALUES ($1)", filename); err != nil {
+	if _, err = tx.Exec("INSERT INTO schema_migrations (filename) VALUES ($1)", filename); err != nil {
 		return fmt.Errorf("failed to record migration: %w", err)
 	}
 
 	// Commit transaction
-	if err := tx.Commit(); err != nil {
+	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 

@@ -1906,7 +1906,8 @@ Unlike GORM's closure-based transactions, sqlx requires manual transaction manag
 
 ```go
 // ✅ Good: Use sqlx transactions with strict error handling
-func (r *OrderRepository) CreateOrderWithItems(ctx context.Context, order *domain.Order) error {
+// IMPORTANT: Use named return value to ensure defer captures errors correctly
+func (r *OrderRepository) CreateOrderWithItems(ctx context.Context, order *domain.Order) (err error) {
     // 1. Begin transaction
     tx, err := r.db.BeginTxx(ctx, nil)
     if err != nil {
@@ -1914,8 +1915,12 @@ func (r *OrderRepository) CreateOrderWithItems(ctx context.Context, order *domai
     }
 
     // Ensure rollback on panic or error
+    // This pattern prevents issues with variable shadowing
     defer func() {
-        if err != nil {
+        if p := recover(); p != nil {
+            _ = tx.Rollback()
+            panic(p) // Re-throw panic after rollback
+        } else if err != nil {
             _ = tx.Rollback()
         }
     }()
