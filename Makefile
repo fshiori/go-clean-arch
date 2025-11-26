@@ -1,4 +1,4 @@
-.PHONY: help build build-all run-api run-worker run-cron test lint clean docker-build gen wire-gen proto-gen mock-gen
+.PHONY: help build build-all run-api run-worker run-cron test lint clean docker-build gen wire-gen proto-gen mock-gen sqlc-gen
 
 # Variables
 APP_NAME=go-clean-arch
@@ -10,7 +10,12 @@ LDFLAGS=-ldflags "-w -s"
 help: ## Display this help screen
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
-gen: wire-gen proto-gen mock-gen ## Regenerate all generated code
+gen: sqlc-gen wire-gen proto-gen mock-gen ## Regenerate all generated code
+
+sqlc-gen: ## Generate Go code from SQL queries using sqlc
+	@echo "Generating sqlc code..."
+	@command -v sqlc >/dev/null 2>&1 || go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+	sqlc generate
 
 wire-gen: ## Regenerate Wire dependency injection code
 	@echo "Generating Wire code..."

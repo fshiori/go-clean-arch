@@ -1,7 +1,7 @@
 # Go Clean Architecture Coding Standards
 
-**Version**: 1.1
-**Last Updated**: 2025-11-20
+**Version**: 1.2
+**Last Updated**: 2025-11-26
 
 > **For AI assistants**: See [CLAUDE.md](CLAUDE.md) for a quick reference guide.
 >
@@ -1882,6 +1882,102 @@ export APP_DATABASE_PASSWORD=$(vault read -field=password secret/db)
 ---
 
 ## Database Standards
+
+### Database Access Layer Standards
+
+This project adopts a **"sqlc primary, sqlx+Squirrel auxiliary"** approach for database access.
+
+**Primary Tool (sqlc):**
+- ✅ **USE FOR**: All static queries (INSERT, UPDATE specific fields, SELECT by ID, fixed JOINs)
+- ✅ **BENEFITS**: Strict type safety, compile-time query validation, best performance
+- ✅ **IDEAL FOR**: CRUD operations, simple queries, queries that rarely change
+
+**Secondary Tool (sqlx + Squirrel):**
+- ✅ **USE FOR**: Dynamic search queries (listing APIs with multiple optional filters)
+- ✅ **BENEFITS**: Flexible query building, handles dynamic WHERE clauses elegantly
+- ✅ **IDEAL FOR**: Complex search, filtering, pagination with dynamic conditions
+
+**Decision Matrix:**
+
+| Scenario | Recommended Tool | Reason |
+|----------|-----------------|--------|
+| Get user by ID | **sqlc** | Static query, type-safe, fast |
+| Create/Update user | **sqlc** | Fixed fields, compile-time validation |
+| Search products with filters | **sqlx + Squirrel** | Dynamic WHERE clauses |
+| List orders with pagination | **sqlx + Squirrel** | Flexible sorting and filtering |
+| Complex multi-table JOIN | **sqlc** (if static) or **sqlx + Squirrel** (if dynamic) | Depends on query complexity |
+
+**Example Comparison:**
+
+```go
+// ✅ sqlc: For static queries
+// query.sql
+-- name: GetUser :one
+SELECT * FROM users WHERE id = ? LIMIT 1;
+
+-- name: CreateUser :exec
+INSERT INTO users (email, password_hash, created_at, updated_at)
+VALUES (?, ?, ?, ?);
+
+// Generated code (type-safe, no runtime reflection)
+func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
+    row := q.db.QueryRowContext(ctx, getUser, id)
+    var i User
+    err := row.Scan(&i.ID, &i.Email, &i.PasswordHash, &i.CreatedAt, &i.UpdatedAt)
+    return i, err
+}
+
+// Repository implementation
+func (r *Repo) GetUser(ctx context.Context, id int64) (*domain.User, error) {
+    u, err := r.queries.GetUser(ctx, id)
+    if err != nil {
+        return nil, err
+    }
+    return domain.ReconstructUser(u.ID, u.Email, u.PasswordHash, u.CreatedAt, u.UpdatedAt), nil
+}
+```
+
+```go
+// ✅ sqlx + Squirrel: For dynamic queries
+func (r *Repo) SearchProducts(ctx context.Context, filters ProductFilters) ([]*domain.Product, error) {
+    query := psql.Select("*").From("products")
+
+    // Build dynamic WHERE clauses
+    if filters.Category != "" {
+        query = query.Where(squirrel.Eq{"category": filters.Category})
+    }
+    if filters.MinPrice > 0 {
+        query = query.Where(squirrel.GtOrEq{"price": filters.MinPrice})
+    }
+    if filters.MaxPrice > 0 {
+        query = query.Where(squirrel.LtOrEq{"price": filters.MaxPrice})
+    }
+    if filters.InStock {
+        query = query.Where(squirrel.Gt{"stock": 0})
+    }
+
+    // Dynamic sorting
+    if filters.SortBy != "" {
+        query = query.OrderBy(filters.SortBy + " " + filters.SortOrder)
+    }
+
+    sql, args, _ := query.ToSql()
+    var models []ProductModel
+    err := r.db.SelectContext(ctx, &models, sql, args...)
+    // ...
+}
+```
+
+**Migration Path:**
+
+If your project currently uses plain sqlx (without Squirrel):
+1. Identify static queries → migrate to **sqlc**
+2. Identify dynamic queries → migrate to **sqlx + Squirrel**
+3. Update CODING_STANDARDS.md examples to reflect the chosen approach
+
+**Note:** This project's example code currently uses plain sqlx. Teams should evaluate whether to migrate to sqlc for static queries based on project requirements.
+
+---
 
 ### Migration Files
 

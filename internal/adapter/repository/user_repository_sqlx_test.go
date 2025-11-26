@@ -15,7 +15,7 @@ import (
 type UserRepositorySQLXTestSuite struct {
 	suite.Suite
 	db   *sqlx.DB
-	repo *userRepositorySQLX
+	repo *userRepositorySQLC
 }
 
 func TestUserRepositorySQLXTestSuite(t *testing.T) {
@@ -41,7 +41,7 @@ func (s *UserRepositorySQLXTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 
 	s.db = db
-	s.repo = &userRepositorySQLX{db: db}
+	s.repo = NewUserRepository(db).(*userRepositorySQLC)
 }
 
 func (s *UserRepositorySQLXTestSuite) TearDownSuite() {
