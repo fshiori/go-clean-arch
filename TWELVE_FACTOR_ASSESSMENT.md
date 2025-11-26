@@ -122,7 +122,7 @@ RUN go mod download
 - Environment variable override support via `APP_*` prefix
 - Viper automatically reads env vars: `pkg/config/config.go:89-94`
 - `.env.example` provides template for environment-based config
-- Docker Compose uses environment variables: `docker-compose.yaml:41-47`
+- Docker Compose uses environment variables: `deployments/docker-compose.yaml:41-47`
 
 ❌ **What's Missing**:
 - **Config files still required**: Application fails without `configs/config.toml`

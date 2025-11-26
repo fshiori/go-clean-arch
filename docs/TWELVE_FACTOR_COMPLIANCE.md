@@ -309,7 +309,7 @@ docker run \
 
 ### Docker Compose
 
-See `docker-compose.yaml` for a complete example of environment-based configuration.
+See `deployments/docker-compose.yaml` for a complete example of environment-based configuration.
 
 ---
 

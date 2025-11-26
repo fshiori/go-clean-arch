@@ -203,6 +203,9 @@ When adding new features, ensure:
 │   ├── logger/
 │   └── middleware/
 ├── configs/                 # Configuration files
+├── deployments/             # IaaS, PaaS, container orchestration deployment configs
+│   ├── docker-compose.yaml  # Docker Compose for local development
+│   └── kubernetes/          # Kubernetes manifests (if applicable)
 ├── migrations/              # Database migrations
 ├── scripts/                 # Build and deployment scripts
 ├── docs/                    # Documentation
@@ -213,7 +216,6 @@ When adding new features, ensure:
 ├── go.sum
 ├── Makefile
 ├── Dockerfile
-├── docker-compose.yaml
 └── README.md
 ```
 
