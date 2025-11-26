@@ -11,16 +11,18 @@
 //   - Backward compatible with legacy logger API
 //
 // Basic Usage:
-//   logger.Init(logger.Config{
-//       Level:  "info",
-//       Format: "json",
-//   })
-//   logger.Info("Server started", "port", 8080)
-//   logger.Error("Failed to connect", "error", err)
+//
+//	logger.Init(logger.Config{
+//	    Level:  "info",
+//	    Format: "json",
+//	})
+//	logger.Info("Server started", "port", 8080)
+//	logger.Error("Failed to connect", "error", err)
 //
 // Context-aware Usage (with trace ID):
-//   logger.InfoContext(ctx, "Processing request", "user_id", 123)
-//   logger.ErrorContext(ctx, "Request failed", "error", err)
+//
+//	logger.InfoContext(ctx, "Processing request", "user_id", 123)
+//	logger.ErrorContext(ctx, "Request failed", "error", err)
 //
 // The Context-aware functions automatically include trace ID if present in context.
 package logger
@@ -61,7 +63,7 @@ func Init(cfg Config) {
 	}
 
 	opts := &slog.HandlerOptions{
-		Level: level,
+		Level:     level,
 		AddSource: true, // Add source file and line number
 	}
 

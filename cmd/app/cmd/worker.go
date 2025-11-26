@@ -28,7 +28,7 @@ func init() {
 	rootCmd.AddCommand(workerCmd)
 }
 
-func runWorker(cmd *cobra.Command, args []string) error {
+func runWorker(_ *cobra.Command, _ []string) error {
 	// Get database connection
 	dbInterface, err := getDB()
 	if err != nil {

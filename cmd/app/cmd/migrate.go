@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"go-clean-arch/internal/app"
 	"go-clean-arch/pkg/logger"
 
 	"github.com/jmoiron/sqlx"
@@ -84,7 +83,7 @@ func init() {
 	migrateCmd.AddCommand(migrateCreateCmd)
 }
 
-func runMigrateUp(cmd *cobra.Command, args []string) error {
+func runMigrateUp(_ *cobra.Command, _ []string) error {
 	logger.Info("Running database migrations...")
 
 	// Get database connection
@@ -97,7 +96,11 @@ func runMigrateUp(cmd *cobra.Command, args []string) error {
 	if !ok {
 		return fmt.Errorf("invalid database type")
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			logger.Error("Failed to close database connection", "error", err)
+		}
+	}()
 
 	// Create migrations table if it doesn't exist
 	if err := createMigrationsTable(db); err != nil {
@@ -137,7 +140,7 @@ func runMigrateUp(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runMigrateDown(cmd *cobra.Command, args []string) error {
+func runMigrateDown(_ *cobra.Command, _ []string) error {
 	logger.Info("Rolling back last migration...")
 
 	// Get database connection
@@ -150,7 +153,11 @@ func runMigrateDown(cmd *cobra.Command, args []string) error {
 	if !ok {
 		return fmt.Errorf("invalid database type")
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			logger.Error("Failed to close database connection", "error", err)
+		}
+	}()
 
 	// Get last applied migration
 	var lastMigration string
@@ -173,7 +180,7 @@ func runMigrateDown(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runMigrateStatus(cmd *cobra.Command, args []string) error {
+func runMigrateStatus(_ *cobra.Command, _ []string) error {
 	// Get database connection
 	dbInterface, err := getDB()
 	if err != nil {
@@ -184,7 +191,11 @@ func runMigrateStatus(cmd *cobra.Command, args []string) error {
 	if !ok {
 		return fmt.Errorf("invalid database type")
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			logger.Error("Failed to close database connection", "error", err)
+		}
+	}()
 
 	// Create migrations table if it doesn't exist
 	if err := createMigrationsTable(db); err != nil {
@@ -229,7 +240,7 @@ func runMigrateStatus(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runMigrateCreate(cmd *cobra.Command, args []string) error {
+func runMigrateCreate(_ *cobra.Command, args []string) error {
 	migrationName := args[0]
 
 	// Get next migration number

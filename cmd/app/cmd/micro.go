@@ -40,7 +40,7 @@ func init() {
 	microCmd.Flags().StringVar(&microAddress, "address", ":8081", "microservice address")
 }
 
-func runMicro(cmd *cobra.Command, args []string) error {
+func runMicro(_ *cobra.Command, _ []string) error {
 	// Get database connection
 	dbInterface, err := getDB()
 	if err != nil {

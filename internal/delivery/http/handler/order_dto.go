@@ -9,8 +9,8 @@ import (
 
 // CreateOrderRequest is the DTO for creating an order
 type CreateOrderRequest struct {
-	UserID int64            `json:"user_id" binding:"required,gt=0"`
-	Items  []OrderItemDTO   `json:"items" binding:"required,min=1,dive"`
+	UserID int64          `json:"user_id" binding:"required,gt=0"`
+	Items  []OrderItemDTO `json:"items" binding:"required,min=1,dive"`
 }
 
 // OrderItemDTO represents an order item in the API layer
@@ -29,13 +29,13 @@ type CheckoutRequest struct {
 
 // OrderResponse is the DTO for order response
 type OrderResponse struct {
-	ID          int64            `json:"id"`
-	UserID      int64            `json:"user_id"`
-	TotalAmount float64          `json:"total_amount"`
-	Status      string           `json:"status"`
-	Items       []OrderItemDTO   `json:"items"`
-	CreatedAt   time.Time        `json:"created_at"`
-	UpdatedAt   time.Time        `json:"updated_at"`
+	ID          int64          `json:"id"`
+	UserID      int64          `json:"user_id"`
+	TotalAmount float64        `json:"total_amount"`
+	Status      string         `json:"status"`
+	Items       []OrderItemDTO `json:"items"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
 // OrderListResponse is the DTO for list of orders

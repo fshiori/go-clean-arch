@@ -28,7 +28,7 @@ func init() {
 	rootCmd.AddCommand(cronCmd)
 }
 
-func runCron(cmd *cobra.Command, args []string) error {
+func runCron(_ *cobra.Command, _ []string) error {
 	// Get database connection
 	dbInterface, err := getDB()
 	if err != nil {

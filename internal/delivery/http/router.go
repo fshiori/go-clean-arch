@@ -26,9 +26,9 @@ func Router(
 	router.Use(middleware.RequestLogger())
 
 	// Health check endpoints (for Kubernetes probes and monitoring)
-	router.GET("/health", healthHandler.HealthCheck)      // Comprehensive health check
-	router.GET("/ready", healthHandler.ReadinessCheck)    // Readiness probe
-	router.GET("/live", healthHandler.LivenessCheck)      // Liveness probe
+	router.GET("/health", healthHandler.HealthCheck)   // Comprehensive health check
+	router.GET("/ready", healthHandler.ReadinessCheck) // Readiness probe
+	router.GET("/live", healthHandler.LivenessCheck)   // Liveness probe
 
 	// API v1 routes
 	v1 := router.Group("/api/v1")

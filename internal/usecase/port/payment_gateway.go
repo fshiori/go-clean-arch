@@ -6,6 +6,7 @@ import "go-clean-arch/internal/domain"
 type TransactionStatus string
 
 const (
+	// TransactionStatusPending indicates the transaction is pending
 	TransactionStatusPending   TransactionStatus = "PENDING"
 	TransactionStatusCompleted TransactionStatus = "COMPLETED"
 	TransactionStatusFailed    TransactionStatus = "FAILED"

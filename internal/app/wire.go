@@ -4,7 +4,8 @@
 // Package app provides dependency injection setup using Wire.
 // This file contains Wire provider definitions and injector functions.
 // The actual implementation is generated in wire_gen.go by running:
-//   wire gen ./internal/app
+//
+//	wire gen ./internal/app
 package app
 
 import (

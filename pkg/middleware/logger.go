@@ -22,21 +22,23 @@ import (
 // to ensure trace IDs are available for logging.
 //
 // Usage:
-//   router.Use(middleware.TraceID())
-//   router.Use(middleware.RequestLogger())
+//
+//	router.Use(middleware.TraceID())
+//	router.Use(middleware.RequestLogger())
 //
 // Log output example (JSON format):
-//   {
-//     "time": "2025-11-02T10:30:45Z",
-//     "level": "INFO",
-//     "msg": "HTTP request completed",
-//     "trace_id": "550e8400-e29b-41d4-a716-446655440000",
-//     "method": "POST",
-//     "path": "/api/v1/users",
-//     "status": 201,
-//     "latency_ms": 45,
-//     "client_ip": "192.168.1.100"
-//   }
+//
+//	{
+//	  "time": "2025-11-02T10:30:45Z",
+//	  "level": "INFO",
+//	  "msg": "HTTP request completed",
+//	  "trace_id": "550e8400-e29b-41d4-a716-446655440000",
+//	  "method": "POST",
+//	  "path": "/api/v1/users",
+//	  "status": 201,
+//	  "latency_ms": 45,
+//	  "client_ip": "192.168.1.100"
+//	}
 func RequestLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()

@@ -16,8 +16,8 @@ type UpdatePasswordRequest struct {
 // Note: This contains json tags and is designed specifically for API output
 // The password field is deliberately excluded for security
 type UserResponse struct {
-	ID    int64  `json:"id"`
-	Email string `json:"email"`
+	ID        int64  `json:"id"`
+	Email     string `json:"email"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }

@@ -1,3 +1,4 @@
+// Package port defines the interfaces (ports) required by the use case layer.
 package port
 
 import (

@@ -7,9 +7,6 @@
 package app
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/google/wire"
-	"github.com/jmoiron/sqlx"
 	"go-clean-arch/internal/adapter/gateway"
 	"go-clean-arch/internal/adapter/repository"
 	"go-clean-arch/internal/delivery/consumer"
@@ -19,6 +16,10 @@ import (
 	handler2 "go-clean-arch/internal/delivery/micro/handler"
 	"go-clean-arch/internal/usecase"
 	"go-clean-arch/pkg/config"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/wire"
+	"github.com/jmoiron/sqlx"
 )
 
 // Injectors from wire.go:

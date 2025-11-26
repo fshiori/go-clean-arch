@@ -8,13 +8,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"go-clean-arch/internal/delivery/micro/handler"
 	"go-clean-arch/pkg/config"
 	"go-clean-arch/pkg/logger"
 
 	"github.com/jmoiron/sqlx"
-	"go-micro.dev/v5"
-	"go-micro.dev/v5/server"
+	micro "go-micro.dev/v5"
 )
 
 // MicroServer represents the microservice server application
@@ -60,7 +58,7 @@ func (m *MicroServer) Start() error {
 
 	// Register handler with the service
 	// The handler is registered with the service name "UserServiceSimple"
-	if err := server.RegisterHandler(srv.Server(), userService); err != nil {
+	if err := srv.Server().Handle(srv.Server().NewHandler(userService)); err != nil {
 		return fmt.Errorf("failed to register handler: %w", err)
 	}
 

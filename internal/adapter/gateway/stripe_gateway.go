@@ -33,10 +33,10 @@ func NewStripeGateway(apiKey string) port.PaymentGateway {
 
 // stripeChargeRequest represents the request to Stripe API
 type stripeChargeRequest struct {
-	Amount      int64  `json:"amount"`       // Amount in cents
+	Amount      int64  `json:"amount"` // Amount in cents
 	Currency    string `json:"currency"`
 	Description string `json:"description"`
-	Source      string `json:"source"`       // Token or card ID
+	Source      string `json:"source"` // Token or card ID
 }
 
 // stripeChargeResponse represents the response from Stripe API

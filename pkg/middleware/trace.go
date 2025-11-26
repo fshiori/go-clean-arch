@@ -22,14 +22,15 @@ const (
 
 // TraceID middleware adds trace ID to request context for distributed tracing.
 // It performs the following operations:
-//   1. Checks if X-Trace-ID header exists in the request
-//   2. If present, uses it; otherwise generates a new UUID
-//   3. Stores the trace ID in gin.Context for easy access
-//   4. Adds X-Trace-ID to response headers
-//   5. Attaches trace ID to request context for structured logging
+//  1. Checks if X-Trace-ID header exists in the request
+//  2. If present, uses it; otherwise generates a new UUID
+//  3. Stores the trace ID in gin.Context for easy access
+//  4. Adds X-Trace-ID to response headers
+//  5. Attaches trace ID to request context for structured logging
 //
 // Usage:
-//   router.Use(middleware.TraceID())
+//
+//	router.Use(middleware.TraceID())
 //
 // This middleware should be registered before any logging middleware
 // to ensure all logs include the trace ID.
@@ -59,10 +60,11 @@ func TraceID() gin.HandlerFunc {
 // Returns empty string if trace ID is not found.
 //
 // Usage:
-//   traceID := middleware.GetTraceID(c)
-//   if traceID != "" {
-//       // Use trace ID
-//   }
+//
+//	traceID := middleware.GetTraceID(c)
+//	if traceID != "" {
+//	    // Use trace ID
+//	}
 func GetTraceID(c *gin.Context) string {
 	if traceID, exists := c.Get(TraceIDKey); exists {
 		if id, ok := traceID.(string); ok {

@@ -13,11 +13,13 @@ const (
 	// User errors
 	ErrCodeUserNotFound       = "USER_NOT_FOUND"
 	ErrCodeEmailAlreadyExists = "EMAIL_ALREADY_EXISTS"
+	ErrCodeUserAlreadyExists  = "USER_ALREADY_EXISTS"
 	ErrCodeInvalidEmail       = "INVALID_EMAIL"
 	ErrCodeInvalidPassword    = "INVALID_PASSWORD"
 	ErrCodePasswordTooShort   = "PASSWORD_TOO_SHORT"
 	ErrCodeIncorrectPassword  = "INCORRECT_PASSWORD"
 	ErrCodePasswordHashFailed = "PASSWORD_HASH_FAILED"
+	ErrCodeValidationFailed   = "VALIDATION_FAILED"
 
 	// Order errors
 	ErrCodeOrderNotFound      = "ORDER_NOT_FOUND"
@@ -32,7 +34,7 @@ const (
 	ErrCodeInsufficientFunds = "INSUFFICIENT_FUNDS"
 
 	// Database errors
-	ErrCodeDatabaseError       = "DATABASE_ERROR"
+	ErrCodeDatabaseError        = "DATABASE_ERROR"
 	ErrCodeDatabaseInsertFailed = "DATABASE_INSERT_FAILED"
 	ErrCodeDatabaseUpdateFailed = "DATABASE_UPDATE_FAILED"
 	ErrCodeDatabaseDeleteFailed = "DATABASE_DELETE_FAILED"
@@ -58,10 +60,12 @@ var (
 	// User errors
 	ErrUserNotFound       = errors.New("user not found")
 	ErrEmailAlreadyExists = errors.New("email already exists")
+	ErrUserAlreadyExists  = errors.New("user already exists")
 	ErrInvalidEmail       = errors.New("invalid email")
 	ErrPasswordTooShort   = errors.New("password must be at least 8 characters")
 	ErrIncorrectPassword  = errors.New("incorrect password")
 	ErrPasswordHashFailed = errors.New("failed to hash password")
+	ErrValidationFailed   = errors.New("validation failed")
 
 	// Order errors
 	ErrOrderNotFound      = errors.New("order not found")
@@ -86,11 +90,13 @@ var ErrorCodeToHTTPStatus = map[string]int{
 
 	// 409 Conflict
 	ErrCodeEmailAlreadyExists: http.StatusConflict,
+	ErrCodeUserAlreadyExists:  http.StatusConflict,
 
 	// 400 Bad Request
 	ErrCodeInvalidEmail:       http.StatusBadRequest,
 	ErrCodeInvalidPassword:    http.StatusBadRequest,
 	ErrCodePasswordTooShort:   http.StatusBadRequest,
+	ErrCodeValidationFailed:   http.StatusBadRequest,
 	ErrCodeEmptyOrder:         http.StatusBadRequest,
 	ErrCodeInvalidOrderStatus: http.StatusBadRequest,
 	ErrCodeInvalidUserID:      http.StatusBadRequest,

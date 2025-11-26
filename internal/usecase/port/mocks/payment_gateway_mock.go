@@ -1,3 +1,4 @@
+// Package mocks provides mock implementations of port interfaces for testing.
 package mocks
 
 import (
@@ -21,12 +22,14 @@ func (m *MockPaymentGateway) CreateTransaction(order *domain.Order, paymentInfo 
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+	//nolint:errcheck // testify mock pattern
 	return args.Get(0).(*port.Transaction), args.Error(1)
 }
 
 // GetTransactionStatus mocks the GetTransactionStatus method
 func (m *MockPaymentGateway) GetTransactionStatus(transactionID string) (port.TransactionStatus, error) {
 	args := m.Called(transactionID)
+	//nolint:errcheck // testify mock pattern
 	return args.Get(0).(port.TransactionStatus), args.Error(1)
 }
 

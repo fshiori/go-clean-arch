@@ -13,11 +13,16 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+const (
+	testEmail    = "user@example.com"
+	testPassword = "password123"
+)
+
 type UserInteractorTestSuite struct {
 	suite.Suite
-	userRepo    *mocks.MockUserRepository
-	interactor  *UserInteractor
-	ctx         context.Context
+	userRepo   *mocks.MockUserRepository
+	interactor *UserInteractor
+	ctx        context.Context
 }
 
 func TestUserInteractorTestSuite(t *testing.T) {
@@ -63,7 +68,7 @@ func (s *UserInteractorTestSuite) TestCreateUser_Success() {
 
 func (s *UserInteractorTestSuite) TestCreateUser_EmailAlreadyExists() {
 	email := "existing@example.com"
-	password := "password123"
+	password := testPassword
 
 	existingUser := domain.ReconstructUser(1, email, "hashedpass", time.Now(), time.Now())
 
@@ -85,7 +90,7 @@ func (s *UserInteractorTestSuite) TestCreateUser_EmailAlreadyExists() {
 
 func (s *UserInteractorTestSuite) TestCreateUser_InvalidEmail() {
 	email := ""
-	password := "password123"
+	password := testPassword
 
 	// Mock: FindByEmail is called first (even for empty email)
 	s.userRepo.On("FindByEmail", s.ctx, email).Return(nil, domain.ErrUserNotFound)
@@ -100,7 +105,7 @@ func (s *UserInteractorTestSuite) TestCreateUser_InvalidEmail() {
 }
 
 func (s *UserInteractorTestSuite) TestCreateUser_InvalidPassword() {
-	email := "user@example.com"
+	email := testEmail
 	password := "short"
 
 	// Mock: FindByEmail is called first
@@ -116,8 +121,8 @@ func (s *UserInteractorTestSuite) TestCreateUser_InvalidPassword() {
 }
 
 func (s *UserInteractorTestSuite) TestCreateUser_RepositoryError() {
-	email := "user@example.com"
-	password := "password123"
+	email := testEmail
+	password := testPassword
 
 	// Mock: FindByEmail returns nil (no duplicate)
 	s.userRepo.On("FindByEmail", s.ctx, email).Return(nil, domain.ErrUserNotFound)
@@ -291,11 +296,11 @@ func (s *UserInteractorTestSuite) TestListUsers_Success() {
 
 func (s *UserInteractorTestSuite) TestListUsers_InvalidPaginationAutoCorrects() {
 	testCases := []struct {
-		page            int
-		pageSize        int
-		expectedOffset  int
-		expectedLimit   int
-		description     string
+		page           int
+		pageSize       int
+		expectedOffset int
+		expectedLimit  int
+		description    string
 	}{
 		{0, 10, 0, 10, "page < 1 becomes 1"},
 		{-1, 10, 0, 10, "negative page becomes 1"},

@@ -1,3 +1,4 @@
+// Package mocks provides mock implementations of port interfaces for testing.
 package mocks
 
 import (
@@ -23,6 +24,7 @@ func (m *MockUserRepository) FindByID(ctx context.Context, id int64) (*domain.Us
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+	//nolint:errcheck // testify mock pattern
 	return args.Get(0).(*domain.User), args.Error(1)
 }
 
@@ -32,6 +34,7 @@ func (m *MockUserRepository) FindByEmail(ctx context.Context, email string) (*do
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+	//nolint:errcheck // testify mock pattern
 	return args.Get(0).(*domain.User), args.Error(1)
 }
 
@@ -59,5 +62,6 @@ func (m *MockUserRepository) List(ctx context.Context, offset, limit int) ([]*do
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+	//nolint:errcheck // testify mock pattern
 	return args.Get(0).([]*domain.User), args.Error(1)
 }

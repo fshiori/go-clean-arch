@@ -28,7 +28,7 @@ func init() {
 	rootCmd.AddCommand(apiCmd)
 }
 
-func runAPI(cmd *cobra.Command, args []string) error {
+func runAPI(_ *cobra.Command, _ []string) error {
 	// Get database connection
 	dbInterface, err := getDB()
 	if err != nil {
