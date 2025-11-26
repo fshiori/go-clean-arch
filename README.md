@@ -373,7 +373,8 @@ For detailed design decisions, see [CODING_STANDARDS.md](CODING_STANDARDS.md).
 
 - **Language**: Go 1.24+
 - **HTTP Framework**: Gin
-- **ORM**: GORM
+- **Database**: sqlx (lightweight, performant database access)
+- **SQL Query Builder**: Squirrel (type-safe SQL generation)
 - **Dependency Injection**: Wire (compile-time)
 - **Configuration**: Viper
 - **Logging**: slog (structured logging)

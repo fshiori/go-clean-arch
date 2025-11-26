@@ -78,7 +78,8 @@ wire gen ./internal/app
 ### Tech Stack
 - **Go**: 1.24+
 - **HTTP Framework**: Gin
-- **ORM**: GORM (PostgreSQL, MySQL, SQLite)
+- **Database**: sqlx (PostgreSQL, MySQL, SQLite)
+- **SQL Query Builder**: Squirrel (fluent SQL generation)
 - **Dependency Injection**: Wire (compile-time)
 - **Configuration**: Viper (YAML + env vars)
 - **Logging**: slog (structured logging with trace IDs)
@@ -144,9 +145,9 @@ wire gen ./internal/app
    - Cobra CLI framework handles commands
 
 3. **Pure domain entities** (no infrastructure tags)
-   - Domain entities have no JSON/GORM tags
-   - DTOs handle JSON serialization
-   - DB models handle GORM mappings
+   - Domain entities have no JSON/DB tags
+   - DTOs handle JSON serialization (in delivery layer)
+   - DB models handle sqlx mappings (in adapter layer)
 
 4. **Wire dependency injection** (compile-time)
    - `internal/app/wire.go` defines provider sets
@@ -195,25 +196,33 @@ type ProductRepository interface {
 **Step 3: Implement Repository**
 ```go
 // internal/adapter/repository/product_model.go
-type ProductModel struct {
-    ID        int64     `gorm:"primaryKey"`
-    Name      string    `gorm:"not null"`
-    Price     int64     `gorm:"not null"`
-    CreatedAt time.Time `gorm:"autoCreateTime"`
+type ProductDBModel struct {
+    ID        int64     `db:"id"`
+    Name      string    `db:"name"`
+    Price     int64     `db:"price"`
+    CreatedAt time.Time `db:"created_at"`
+    UpdatedAt time.Time `db:"updated_at"`
 }
 
-func (m *ProductModel) ToDomain() *domain.Product { ... }
-func ToProductModel(p *domain.Product) *ProductModel { ... }
+func (m *ProductDBModel) ToDomain() *domain.Product { ... }
+func FromDomain(p *domain.Product) *ProductDBModel { ... }
 ```
 
 ```go
-// internal/adapter/repository/product_repository_gorm.go
-type ProductRepositoryGORM struct {
-    db *gorm.DB
+// internal/adapter/repository/product_repository_sqlx.go
+import (
+    "github.com/Masterminds/squirrel"
+    "github.com/jmoiron/sqlx"
+)
+
+var psql = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+
+type ProductRepositorySQLX struct {
+    db *sqlx.DB
 }
 
-func NewProductRepository(db *gorm.DB) *ProductRepositoryGORM { ... }
-func (r *ProductRepositoryGORM) Save(ctx context.Context, product *domain.Product) error { ... }
+func NewProductRepository(db *sqlx.DB) *ProductRepositorySQLX { ... }
+func (r *ProductRepositorySQLX) Save(ctx context.Context, product *domain.Product) error { ... }
 ```
 
 **Step 4: Create Use Case**
@@ -278,8 +287,8 @@ v1 := router.Group("/api/v1")
 var RepositorySet = wire.NewSet(
     repository.NewUserRepository,
     repository.NewProductRepository,  // ← Add this
-    wire.Bind(new(port.UserRepository), new(*repository.UserRepositoryGORM)),
-    wire.Bind(new(port.ProductRepository), new(*repository.ProductRepositoryGORM)),  // ← Add this
+    wire.Bind(new(port.UserRepository), new(*repository.UserRepositorySQLX)),
+    wire.Bind(new(port.ProductRepository), new(*repository.ProductRepositorySQLX)),  // ← Add this
 )
 
 // Add to UseCaseSet:
@@ -314,7 +323,7 @@ wire gen ./internal/app
 | Gateway Interface | `internal/usecase/port/{service}_gateway.go` | `payment_gateway.go` |
 | Use Case Interface | `internal/usecase/interfaces.go` | Single file for all interfaces |
 | Use Case Implementation | `internal/usecase/{entity}_interactor.go` | `user_interactor.go` |
-| Repository Implementation | `internal/adapter/repository/{entity}_repository_gorm.go` | `user_repository_gorm.go` |
+| Repository Implementation | `internal/adapter/repository/{entity}_repository_sqlx.go` | `user_repository_sqlx.go` |
 | DB Model | `internal/adapter/repository/{entity}_model.go` | `user_model.go` |
 | Gateway Implementation | `internal/adapter/gateway/{service}_gateway.go` | `stripe_gateway.go` |
 | HTTP Handler | `internal/delivery/http/handler/{entity}_handler.go` | `user_handler.go` |
@@ -331,7 +340,7 @@ wire gen ./internal/app
 ### Architecture Violations
 - ❌ **DON'T** import `adapter` or `delivery` in `usecase` layer
 - ❌ **DON'T** import any other layer in `domain` layer
-- ❌ **DON'T** add JSON/GORM tags to domain entities
+- ❌ **DON'T** add JSON/DB tags to domain entities
 - ❌ **DON'T** put business logic in handlers (keep them thin)
 - ❌ **DON'T** access repositories directly in handlers
 
@@ -474,14 +483,15 @@ Domain Entity (pure, no tags)
     ↓ [Use Case Layer]
 Domain Entity (unchanged)
     ↓ [Repository converts to Model]
-DB Model (with GORM tags)
+DB Model (with db tags for sqlx)
     ↓ [Database]
 ```
 
 ### Key Points
 - **Domain entities** remain pure (no JSON/DB tags)
 - **DTOs** handle JSON serialization (in delivery layer)
-- **DB models** handle GORM mappings (in adapter layer)
+- **DB models** handle sqlx mappings with `db` tags (in adapter layer)
+- **Squirrel** builds SQL queries in a type-safe, fluent manner
 - Each layer owns its transformation logic
 
 ---

@@ -185,7 +185,7 @@ When adding new features, ensure:
 │   │   ├── repository/      # Data access layer
 │   │   │   ├── db.go
 │   │   │   ├── user_model.go
-│   │   │   ├── user_repository_gorm.go
+│   │   │   ├── user_repository_sqlx.go
 │   │   │   └── user_repository_test.go
 │   │   └── gateway/         # External service clients
 │   │       └── stripe_gateway.go
@@ -325,7 +325,7 @@ const maxRetries = 3 // Should be capitalized
 - ✅ **DO**: Rich domain models with behavior
 - ✅ **DO**: Validate in constructors and methods
 - ❌ **DON'T**: Import any other application layer
-- ❌ **DON'T**: Use infrastructure tags (`json:`, `gorm:`, etc.)
+- ❌ **DON'T**: Use infrastructure tags (`json:`, `db:`, `gorm:`, etc.)
 - ❌ **DON'T**: Depend on frameworks or external libraries
 
 **Example**:
@@ -410,12 +410,12 @@ func ReconstructUser(id int64, email, passwordHash string, createdAt, updatedAt 
 
 // ❌ Bad: Anemic domain model with infrastructure tags
 type User struct {
-    ID       int64  `json:"id" gorm:"primaryKey"`
-    Email    string `json:"email" gorm:"uniqueIndex"`
-    Password string `json:"-" gorm:"column:password_hash"`
+    ID       int64  `json:"id" db:"id"`
+    Email    string `json:"email" db:"email"`
+    Password string `json:"-" db:"password_hash"`
 }
 // This violates Clean Architecture because domain entities
-// should not know about infrastructure concerns (JSON, GORM).
+// should not know about infrastructure concerns (JSON, database).
 ```
 
 ### 2. Use Case Layer (`internal/usecase/`)
@@ -485,46 +485,95 @@ func (i *UserInteractor) CreateUser(ctx context.Context, email, password string)
 ```go
 // ✅ Good: DB model separate from domain entity
 // internal/adapter/repository/user_model.go
-type UserModel struct {
-    ID           int64     `gorm:"primaryKey"`
-    Email        string    `gorm:"uniqueIndex;not null"`
-    PasswordHash string    `gorm:"column:password_hash;not null"`
-    CreatedAt    time.Time `gorm:"autoCreateTime"`
+type UserDBModel struct {
+    ID           int64     `db:"id"`
+    Email        string    `db:"email"`
+    PasswordHash string    `db:"password_hash"`
+    CreatedAt    time.Time `db:"created_at"`
+    UpdatedAt    time.Time `db:"updated_at"`
 }
 
-func (m *UserModel) TableName() string {
-    return "users"
+func (m *UserDBModel) ToDomain() *domain.User {
+    return domain.ReconstructUser(m.ID, m.Email, m.PasswordHash, m.CreatedAt, m.UpdatedAt)
 }
 
-func (m *UserModel) ToDomain() *domain.User {
-    return domain.ReconstructUser(m.ID, m.Email, m.PasswordHash, m.CreatedAt)
-}
-
-func ToModel(user *domain.User) *UserModel {
-    return &UserModel{
+func FromDomain(user *domain.User) *UserDBModel {
+    return &UserDBModel{
         ID:           user.ID,
         Email:        user.Email,
-        PasswordHash: user.PasswordHash,
+        PasswordHash: user.Password(),
         CreatedAt:    user.CreatedAt,
+        UpdatedAt:    user.UpdatedAt,
     }
 }
 
-// ✅ Good: Repository implements port interface
-// internal/adapter/repository/user_repository_gorm.go
-type UserRepositoryGORM struct {
-    db *gorm.DB
+// ✅ Good: Repository implements port interface using sqlx + Squirrel
+// internal/adapter/repository/user_repository_sqlx.go
+import (
+    "context"
+    "database/sql"
+    "errors"
+    "fmt"
+
+    "github.com/Masterminds/squirrel"
+    "github.com/jmoiron/sqlx"
+    "go-clean-arch/internal/domain"
+)
+
+// PostgreSQL uses $1, $2 placeholders (use squirrel.Question for MySQL)
+var psql = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+
+type UserRepositorySQLX struct {
+    db *sqlx.DB
 }
 
-func NewUserRepository(db *gorm.DB) *UserRepositoryGORM {
-    return &UserRepositoryGORM{db: db}
+func NewUserRepository(db *sqlx.DB) *UserRepositorySQLX {
+    return &UserRepositorySQLX{db: db}
 }
 
-func (r *UserRepositoryGORM) Save(ctx context.Context, user *domain.User) error {
-    model := ToModel(user)
-    if err := r.db.WithContext(ctx).Create(model).Error; err != nil {
-        return fmt.Errorf("failed to save user: %w", err)
+func (r *UserRepositorySQLX) Save(ctx context.Context, user *domain.User) error {
+    model := FromDomain(user)
+
+    // Build SQL with Squirrel
+    query, args, err := psql.Insert("users").
+        Columns("email", "password_hash", "created_at", "updated_at").
+        Values(model.Email, model.PasswordHash, model.CreatedAt, model.UpdatedAt).
+        Suffix("RETURNING id").  // PostgreSQL-specific
+        ToSql()
+
+    if err != nil {
+        return fmt.Errorf("failed to build query: %w", err)
     }
+
+    // Execute with sqlx
+    err = r.db.QueryRowxContext(ctx, query, args...).Scan(&model.ID)
+    if err != nil {
+        return fmt.Errorf("failed to insert user: %w", err)
+    }
+
     return nil
+}
+
+func (r *UserRepositorySQLX) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
+    query, args, err := psql.Select("*").
+        From("users").
+        Where(squirrel.Eq{"email": email}).
+        ToSql()
+
+    if err != nil {
+        return nil, fmt.Errorf("failed to build query: %w", err)
+    }
+
+    var model UserDBModel
+    err = r.db.GetContext(ctx, &model, query, args...)
+    if err != nil {
+        if errors.Is(err, sql.ErrNoRows) {
+            return nil, nil  // or return domain.ErrUserNotFound
+        }
+        return nil, fmt.Errorf("database error: %w", err)
+    }
+
+    return model.ToDomain(), nil
 }
 ```
 
@@ -783,6 +832,203 @@ if user, err := repo.FindByID(ctx, id); err != nil { return nil, err } else { re
 
 ---
 
+## Generics (Go 1.18+)
+
+### When to Use Generics
+
+Generics are useful for reducing boilerplate code in specific scenarios. Use them judiciously:
+
+**✅ Good Use Cases:**
+- Generic data structures (pagination, result wrappers)
+- Utility functions operating on multiple types
+- DTO conversion helpers
+- Repository pagination helpers
+
+**❌ Avoid:**
+- Overusing generics where simple interfaces suffice
+- Making code unnecessarily complex
+- Using generics in domain entities (keep them simple)
+
+### Generic Pagination Response
+
+```go
+// ✅ Good: Generic pagination for DTOs
+// pkg/common/response.go or internal/delivery/http/common/
+type PageResponse[T any] struct {
+    Data       []T   `json:"data"`
+    Total      int64 `json:"total"`
+    Page       int   `json:"page"`
+    PageSize   int   `json:"page_size"`
+    TotalPages int   `json:"total_pages"`
+}
+
+func NewPageResponse[T any](data []T, total int64, page, pageSize int) *PageResponse[T] {
+    totalPages := (int(total) + pageSize - 1) / pageSize
+    return &PageResponse[T]{
+        Data:       data,
+        Total:      total,
+        Page:       page,
+        PageSize:   pageSize,
+        TotalPages: totalPages,
+    }
+}
+
+// Usage in handler
+func (h *UserHandler) List(c *gin.Context) {
+    users, total, err := h.userUC.ListUsers(ctx, page, pageSize)
+    // ...
+
+    // Convert domain entities to DTOs
+    userDTOs := make([]UserResponse, len(users))
+    for i, u := range users {
+        userDTOs[i] = *ToUserResponse(u)
+    }
+
+    response := NewPageResponse(userDTOs, total, page, pageSize)
+    c.JSON(http.StatusOK, response)
+}
+```
+
+### Generic DTO Conversion
+
+```go
+// ✅ Good: Generic slice transformation
+func MapSlice[T any, U any](items []T, fn func(T) U) []U {
+    result := make([]U, len(items))
+    for i, item := range items {
+        result[i] = fn(item)
+    }
+    return result
+}
+
+// Usage
+func (h *UserHandler) List(c *gin.Context) {
+    users, total, err := h.userUC.ListUsers(ctx, page, pageSize)
+    // ...
+
+    // Concise DTO conversion
+    userDTOs := MapSlice(users, func(u *domain.User) UserResponse {
+        return *ToUserResponse(u)
+    })
+
+    response := NewPageResponse(userDTOs, total, page, pageSize)
+    c.JSON(http.StatusOK, response)
+}
+```
+
+### Generic Repository Helpers
+
+```go
+// ✅ Good: Generic pagination query helper
+type PaginationParams struct {
+    Page     int
+    PageSize int
+    Offset   int
+}
+
+func NewPaginationParams(page, pageSize int) PaginationParams {
+    if page < 1 {
+        page = 1
+    }
+    if pageSize < 1 || pageSize > 100 {
+        pageSize = 20
+    }
+    return PaginationParams{
+        Page:     page,
+        PageSize: pageSize,
+        Offset:   (page - 1) * pageSize,
+    }
+}
+
+// Can be used across all repositories
+func (r *UserRepositorySQLX) List(ctx context.Context, params PaginationParams) ([]*domain.User, int64, error) {
+    // Count total
+    var total int64
+    countQuery, countArgs, _ := psql.Select("COUNT(*)").From("users").ToSql()
+    r.db.GetContext(ctx, &total, countQuery, countArgs...)
+
+    // Get paginated results
+    query, args, _ := psql.Select("*").
+        From("users").
+        OrderBy("created_at DESC").
+        Limit(uint64(params.PageSize)).
+        Offset(uint64(params.Offset)).
+        ToSql()
+
+    var models []UserDBModel
+    if err := r.db.SelectContext(ctx, &models, query, args...); err != nil {
+        return nil, 0, err
+    }
+
+    users := make([]*domain.User, len(models))
+    for i, m := range models {
+        users[i] = m.ToDomain()
+    }
+
+    return users, total, nil
+}
+```
+
+### Generic Result Wrapper (Optional)
+
+```go
+// ✅ Good: Generic result type for better error handling
+type Result[T any] struct {
+    value T
+    err   error
+}
+
+func Ok[T any](value T) Result[T] {
+    return Result[T]{value: value}
+}
+
+func Err[T any](err error) Result[T] {
+    return Result[T]{err: err}
+}
+
+func (r Result[T]) Unwrap() (T, error) {
+    return r.value, r.err
+}
+
+func (r Result[T]) IsOk() bool {
+    return r.err == nil
+}
+
+func (r Result[T]) IsErr() bool {
+    return r.err != nil
+}
+
+// Usage (more Rust-like, use sparingly in Go)
+func (i *UserInteractor) CreateUser(ctx context.Context, email, password string) Result[*domain.User] {
+    user, err := domain.NewUser(email, password)
+    if err != nil {
+        return Err[*domain.User](err)
+    }
+
+    if err := i.userRepo.Save(ctx, user); err != nil {
+        return Err[*domain.User](err)
+    }
+
+    return Ok(user)
+}
+```
+
+### Best Practices
+
+**DO:**
+- ✅ Use generics for common data structures (pagination, lists)
+- ✅ Use generics for utility functions (mapping, filtering)
+- ✅ Keep generic functions simple and focused
+- ✅ Provide type parameters with clear names: `[T any]`, `[K comparable, V any]`
+
+**DON'T:**
+- ❌ Use generics in domain entities (keep business logic simple)
+- ❌ Over-engineer with unnecessary type parameters
+- ❌ Replace simple interfaces with generics
+- ❌ Use generics when a simple `any` or interface works better
+
+---
+
 ## Error Handling
 
 ### Domain Error Types
@@ -816,19 +1062,70 @@ var (
 )
 ```
 
-### Structured Error Handling with oops
+### Error Wrapping and Context
 
-Use the [oops](https://github.com/samber/oops) library for rich error context:
+#### Option 1: Standard Library (Recommended for Simple Projects)
+
+Use Go's built-in error wrapping with `fmt.Errorf` and `%w`:
+
+```go
+import (
+    "context"
+    "database/sql"
+    "errors"
+    "fmt"
+)
+
+// ✅ Good: Standard library error wrapping
+func (r *UserRepositorySQLX) FindByID(ctx context.Context, id int64) (*domain.User, error) {
+    query, args, err := psql.Select("*").
+        From("users").
+        Where(squirrel.Eq{"id": id}).
+        ToSql()
+
+    if err != nil {
+        return nil, fmt.Errorf("failed to build query: %w", err)
+    }
+
+    var model UserDBModel
+    err = r.db.GetContext(ctx, &model, query, args...)
+    if err != nil {
+        if errors.Is(err, sql.ErrNoRows) {
+            return nil, fmt.Errorf("user %d: %w", id, domain.ErrUserNotFound)
+        }
+        return nil, fmt.Errorf("failed to query user %d: %w", id, err)
+    }
+
+    return model.ToDomain(), nil
+}
+```
+
+#### Option 2: Rich Error Context with oops (Optional)
+
+For complex projects requiring structured error context, you can use the [oops](https://github.com/samber/oops) library:
 
 ```go
 import "github.com/samber/oops"
 
-// ✅ Good: Rich error context
-func (r *UserRepositoryGORM) FindByID(ctx context.Context, id int64) (*domain.User, error) {
-    var model UserModel
-    err := r.db.WithContext(ctx).First(&model, id).Error
+// ✅ Good: Rich error context with oops
+func (r *UserRepositorySQLX) FindByID(ctx context.Context, id int64) (*domain.User, error) {
+    query, args, err := psql.Select("*").
+        From("users").
+        Where(squirrel.Eq{"id": id}).
+        ToSql()
+
     if err != nil {
-        if errors.Is(err, gorm.ErrRecordNotFound) {
+        return nil, oops.
+            Code("QUERY_BUILD_ERROR").
+            In("repository").
+            With("user_id", id).
+            Wrapf(err, "failed to build query")
+    }
+
+    var model UserDBModel
+    err = r.db.GetContext(ctx, &model, query, args...)
+    if err != nil {
+        if errors.Is(err, sql.ErrNoRows) {
             return nil, oops.
                 Code("USER_NOT_FOUND").
                 In("repository").
@@ -847,6 +1144,16 @@ func (r *UserRepositoryGORM) FindByID(ctx context.Context, id int64) (*domain.Us
     return model.ToDomain(), nil
 }
 ```
+
+**When to use oops:**
+- ✅ Complex microservices with distributed tracing
+- ✅ Need structured logging with error context
+- ✅ Multiple teams require consistent error codes
+
+**When to use standard library:**
+- ✅ Simple projects or getting started
+- ✅ Want to minimize dependencies
+- ✅ Basic error wrapping is sufficient
 
 ### Error Mapping in Middleware
 
@@ -1020,7 +1327,7 @@ import (
 // Provider Sets
 var RepositorySet = wire.NewSet(
     repository.NewUserRepository,
-    wire.Bind(new(port.UserRepository), new(*repository.UserRepositoryGORM)),
+    wire.Bind(new(port.UserRepository), new(*repository.UserRepositorySQLX)),
 )
 
 var UseCaseSet = wire.NewSet(
@@ -1033,7 +1340,7 @@ var HandlerSet = wire.NewSet(
 )
 
 // Injector function
-func InitializeAPIRouter(db *gorm.DB, logger *slog.Logger) (*gin.Engine, error) {
+func InitializeAPIRouter(db *sqlx.DB, logger *slog.Logger) (*gin.Engine, error) {
     wire.Build(
         RepositorySet,
         UseCaseSet,
@@ -1191,12 +1498,12 @@ POST   /api/v1/user/changePassword
 
 ### Protobuf File Organization
 
-Following [golang-standards/project-layout](https://github.com/golang-standards/project-layout), protobuf files should be placed in the **`api/` directory**, not `proto/`:
+Following [golang-standards/project-layout](https://github.com/golang-standards/project-layout), protobuf files **must** be placed in the **`api/proto/`** directory:
 
 ```
 .
 ├── api/                         # API definitions
-│   ├── proto/
+│   ├── proto/                   # Protocol Buffer definitions
 │   │   └── user/
 │   │       ├── user.proto       # User service definition
 │   │       └── v1/              # Versioned APIs
@@ -1205,7 +1512,7 @@ Following [golang-standards/project-layout](https://github.com/golang-standards/
 │       └── openapi.yaml
 ```
 
-**Note**: This project currently uses `proto/` directory, which should be migrated to `api/proto/` to follow standard Go project layout.
+This structure keeps API contracts organized and follows Go community standards.
 
 ### Protobuf Style Guide
 
@@ -1571,6 +1878,9 @@ export APP_DATABASE_PASSWORD=$(vault read -field=password secret/db)
 
 ### Migration Files
 
+**IMPORTANT**: Database migrations are **mandatory** when using sqlx (unlike GORM which has AutoMigrate).
+You must use migration tools like [golang-migrate](https://github.com/golang-migrate/migrate) or [goose](https://github.com/pressly/goose).
+
 ```sql
 -- migrations/001_create_users_table.sql
 -- +migrate Up
@@ -1590,27 +1900,109 @@ DROP TABLE IF EXISTS users;
 
 ### Repository Patterns
 
+#### Transaction Handling with sqlx
+
+Unlike GORM's closure-based transactions, sqlx requires manual transaction management:
+
 ```go
-// ✅ Good: Use transactions
+// ✅ Good: Use sqlx transactions with strict error handling
 func (r *OrderRepository) CreateOrderWithItems(ctx context.Context, order *domain.Order) error {
-    return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-        // Save order
-        orderModel := ToOrderModel(order)
-        if err := tx.Create(orderModel).Error; err != nil {
+    // 1. Begin transaction
+    tx, err := r.db.BeginTxx(ctx, nil)
+    if err != nil {
+        return fmt.Errorf("failed to begin transaction: %w", err)
+    }
+
+    // Ensure rollback on panic or error
+    defer func() {
+        if err != nil {
+            _ = tx.Rollback()
+        }
+    }()
+
+    // 2. Prepare SQL using Squirrel
+    orderModel := ToOrderModel(order)
+    q1, args1, err := psql.Insert("orders").
+        Columns("user_id", "total_amount", "status").
+        Values(orderModel.UserID, orderModel.TotalAmount, orderModel.Status).
+        Suffix("RETURNING id").
+        ToSql()
+    if err != nil {
+        return err
+    }
+
+    // 3. Execute within transaction (use tx, not r.db)
+    if err := tx.QueryRowxContext(ctx, q1, args1...).Scan(&orderModel.ID); err != nil {
+        return fmt.Errorf("failed to create order: %w", err)
+    }
+
+    // 4. Handle related data
+    for _, item := range order.GetItems() {
+        q2, args2, err := psql.Insert("order_items").
+            Columns("order_id", "product_id", "quantity").
+            Values(orderModel.ID, item.ProductID, item.Quantity).
+            ToSql()
+        if err != nil {
             return err
         }
 
-        // Save order items
-        for _, item := range order.GetItems() {
-            itemModel := ToOrderItemModel(item, orderModel.ID)
-            if err := tx.Create(itemModel).Error; err != nil {
-                return err
-            }
+        if _, err := tx.ExecContext(ctx, q2, args2...); err != nil {
+            return fmt.Errorf("failed to create order item: %w", err)
         }
+    }
 
-        return nil
-    })
+    // 5. Commit transaction
+    if err = tx.Commit(); err != nil {
+        return fmt.Errorf("failed to commit transaction: %w", err)
+    }
+
+    return nil
 }
+```
+
+#### Query Building with Squirrel
+
+**Important**: Configure the correct placeholder format for your database:
+
+```go
+import "github.com/Masterminds/squirrel"
+
+// PostgreSQL: uses $1, $2, $3
+var psql = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+
+// MySQL: uses ? placeholders (default)
+var mysql = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
+```
+
+**Common patterns**:
+
+```go
+// SELECT with WHERE
+query, args, err := psql.Select("*").
+    From("users").
+    Where(squirrel.Eq{"id": userID}).
+    ToSql()
+
+// SELECT with multiple conditions
+query, args, err := psql.Select("*").
+    From("orders").
+    Where(squirrel.And{
+        squirrel.Eq{"user_id": userID},
+        squirrel.Gt{"created_at": startDate},
+    }).
+    ToSql()
+
+// UPDATE
+query, args, err := psql.Update("users").
+    Set("email", newEmail).
+    Set("updated_at", time.Now()).
+    Where(squirrel.Eq{"id": userID}).
+    ToSql()
+
+// DELETE
+query, args, err := psql.Delete("users").
+    Where(squirrel.Eq{"id": userID}).
+    ToSql()
 ```
 
 ---
