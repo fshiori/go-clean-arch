@@ -319,7 +319,7 @@ See `deployments/docker-compose.yaml` for a complete example of environment-base
 - [Factor III - Config](https://12factor.net/config)
 - [Factor IX - Disposability](https://12factor.net/disposability)
 - [Factor XII - Admin Processes](https://12factor.net/admin-processes)
-- [CODING_STANDARDS.md](../CODING_STANDARDS.md) - Comprehensive coding standards including graceful shutdown implementation
+- [CODING_STANDARDS.md](CODING_STANDARDS.md) - Comprehensive coding standards including graceful shutdown implementation
 
 ---
 
