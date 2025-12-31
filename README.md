@@ -344,7 +344,7 @@ make vet
 
 - [CLAUDE.md](CLAUDE.md) - Quick reference for AI assistants
 - [CODING_STANDARDS.md](CODING_STANDARDS.md) - Comprehensive coding standards
-- [TWELVE_FACTOR_ASSESSMENT.md](docs/TWELVE_FACTOR_ASSESSMENT.md) - Twelve-Factor compliance details
+- [TWELVE_FACTOR_COMPLIANCE.md](docs/TWELVE_FACTOR_COMPLIANCE.md) - Twelve-Factor compliance details
 
 ## Design Philosophy
 

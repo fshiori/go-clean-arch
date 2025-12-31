@@ -76,7 +76,7 @@ The Twelve-Factor methodology provides best practices for:
 
 **Overall Compliance**: **12/12 factors** ✅
 
-For detailed assessment, see [TWELVE_FACTOR_ASSESSMENT.md](../TWELVE_FACTOR_ASSESSMENT.md).
+For detailed assessment, see [TWELVE_FACTOR_COMPLIANCE.md](docs/TWELVE_FACTOR_COMPLIANCE.md).
 
 ### Critical Requirements
 
