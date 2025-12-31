@@ -3,19 +3,26 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"go-clean-arch/pkg/logger"
 
-	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cobra"
 )
 
-// migrateCmd represents the migrate command
+// migrateCmd represents the migrate command using Atlas
 var migrateCmd = &cobra.Command{
 	Use:   "migrate",
-	Short: "Database migration management (Twelve-Factor compliant admin process)",
-	Long: `Run database migrations as one-off admin processes.
+	Short: "Database migration management using Atlas (Twelve-Factor compliant admin process)",
+	Long: `Run database migrations as one-off admin processes using Atlas.
+
+Atlas is a modern database schema management tool that provides:
+- Versioned migrations with automatic tracking
+- Schema validation and safety checks
+- Support for PostgreSQL, MySQL, SQLite, and more
+- Declarative schema definitions
 
 This command follows Twelve-Factor App methodology (Factor XII - Admin Processes):
 - Runs as one-off process using the same codebase
@@ -27,28 +34,46 @@ Available subcommands:
   down   - Rollback the last migration
   status - Show current migration status
   create - Create a new migration file
+  validate - Validate migration files
 
 Examples:
   app migrate up
   app migrate down
   app migrate status
-  app migrate create "add_users_table"`,
+  app migrate create "add_users_table"
+  app migrate validate
+
+Environment Variables:
+  DATABASE_URL - Database connection string (required)
+    Format: postgres://user:pass@host:port/dbname?sslmode=disable
+           mysql://user:pass@tcp(host:port)/dbname
+           sqlite://file.db
+  ATLAS_ENV    - Atlas environment to use (default: local)`,
 }
 
 var migrateUpCmd = &cobra.Command{
 	Use:   "up",
-	Short: "Apply all pending migrations",
-	Long: `Apply all pending database migrations.
+	Short: "Apply all pending migrations using Atlas",
+	Long: `Apply all pending database migrations using Atlas.
 
 This will execute all SQL migration files in the migrations/ directory
-that haven't been applied yet.`,
+that haven't been applied yet.
+
+Atlas will:
+- Validate migration files before applying
+- Track applied migrations in the database
+- Run migrations in a transaction (when supported)
+- Provide detailed output of changes`,
 	RunE: runMigrateUp,
 }
 
 var migrateDownCmd = &cobra.Command{
-	Use:   "down",
-	Short: "Rollback the last migration",
-	Long: `Rollback the most recently applied migration.
+	Use:   "down [steps]",
+	Short: "Rollback migrations using Atlas",
+	Long: `Rollback one or more migrations using Atlas.
+
+By default, rolls back 1 migration. You can specify the number of steps:
+  app migrate down 2
 
 WARNING: This operation cannot be undone. Make sure you have backups.`,
 	RunE: runMigrateDown,
@@ -56,23 +81,38 @@ WARNING: This operation cannot be undone. Make sure you have backups.`,
 
 var migrateStatusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Show migration status",
-	Long:  `Display which migrations have been applied and which are pending.`,
+	Short: "Show migration status using Atlas",
+	Long:  `Display which migrations have been applied and which are pending using Atlas.`,
 	RunE:  runMigrateStatus,
 }
 
 var migrateCreateCmd = &cobra.Command{
 	Use:   "create [name]",
-	Short: "Create a new migration file",
-	Long: `Create a new SQL migration file with the given name.
+	Short: "Create a new migration file using Atlas",
+	Long: `Create a new SQL migration file with the given name using Atlas.
 
 Example:
   app migrate create "add_orders_table"
 
 This will create:
-  migrations/003_add_orders_table.sql`,
+  migrations/YYYYMMDDHHMMSS_add_orders_table.sql
+
+Atlas uses timestamps instead of sequential numbers for better
+conflict resolution in team environments.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runMigrateCreate,
+}
+
+var migrateValidateCmd = &cobra.Command{
+	Use:   "validate",
+	Short: "Validate migration files using Atlas",
+	Long: `Validate migration files for correctness using Atlas.
+
+This will check:
+- SQL syntax errors
+- Migration file naming and ordering
+- Schema consistency`,
+	RunE: runMigrateValidate,
 }
 
 func init() {
@@ -81,161 +121,146 @@ func init() {
 	migrateCmd.AddCommand(migrateDownCmd)
 	migrateCmd.AddCommand(migrateStatusCmd)
 	migrateCmd.AddCommand(migrateCreateCmd)
+	migrateCmd.AddCommand(migrateValidateCmd)
 }
 
 func runMigrateUp(_ *cobra.Command, _ []string) error {
-	logger.Info("Running database migrations...")
+	logger.Info("Running database migrations using Atlas...")
 
-	// Get database connection
-	dbInterface, err := getDB()
+	// Check if Atlas is installed
+	if err := checkAtlasInstalled(); err != nil {
+		return err
+	}
+
+	// Get DATABASE_URL from environment or config
+	dbURL, err := getDatabaseURL()
 	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+		return err
 	}
 
-	db, ok := dbInterface.(*sqlx.DB)
-	if !ok {
-		return fmt.Errorf("invalid database type")
-	}
-	defer func() {
-		if err := db.Close(); err != nil {
-			logger.Error("Failed to close database connection", "error", err)
-		}
-	}()
+	// Get Atlas environment (default: local)
+	atlasEnv := getAtlasEnv()
 
-	// Create migrations table if it doesn't exist
-	if err := createMigrationsTable(db); err != nil {
-		return fmt.Errorf("failed to create migrations table: %w", err)
-	}
+	logger.Info("Applying migrations", "environment", atlasEnv)
 
-	// Get list of applied migrations
-	appliedMigrations, err := getAppliedMigrations(db)
+	// Run Atlas migrate apply
+	cmd := exec.Command("atlas", "migrate", "apply",
+		"--env", atlasEnv,
+		"--url", dbURL,
+	)
+
+	// Set environment variables
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("DATABASE_URL=%s", dbURL),
+	)
+
+	// Capture output
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to get applied migrations: %w", err)
+		logger.Error("Failed to apply migrations", "error", err, "output", string(output))
+		return fmt.Errorf("failed to apply migrations: %w\n%s", err, string(output))
 	}
 
-	// Get list of migration files
-	migrationFiles, err := getMigrationFiles()
-	if err != nil {
-		return fmt.Errorf("failed to read migration files: %w", err)
-	}
-
-	// Apply pending migrations
-	appliedCount := 0
-	for _, file := range migrationFiles {
-		if _, applied := appliedMigrations[file]; !applied {
-			logger.Info("Applying migration", "file", file)
-			if err := applyMigration(db, file); err != nil {
-				return fmt.Errorf("failed to apply migration %s: %w", file, err)
-			}
-			appliedCount++
-		}
-	}
-
-	if appliedCount == 0 {
-		logger.Info("No pending migrations")
-	} else {
-		logger.Info("Migrations applied successfully", "count", appliedCount)
-	}
+	// Print output
+	fmt.Println(string(output))
+	logger.Info("Migrations applied successfully")
 
 	return nil
 }
 
-func runMigrateDown(_ *cobra.Command, _ []string) error {
-	logger.Info("Rolling back last migration...")
+func runMigrateDown(cmd *cobra.Command, args []string) error {
+	logger.Info("Rolling back migrations using Atlas...")
 
-	// Get database connection
-	dbInterface, err := getDB()
+	// Check if Atlas is installed
+	if err := checkAtlasInstalled(); err != nil {
+		return err
+	}
+
+	// Get DATABASE_URL from environment or config
+	dbURL, err := getDatabaseURL()
 	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+		return err
 	}
 
-	db, ok := dbInterface.(*sqlx.DB)
-	if !ok {
-		return fmt.Errorf("invalid database type")
-	}
-	defer func() {
-		if err := db.Close(); err != nil {
-			logger.Error("Failed to close database connection", "error", err)
-		}
-	}()
+	// Get Atlas environment (default: local)
+	atlasEnv := getAtlasEnv()
 
-	// Get last applied migration
-	var lastMigration string
-	err = db.Get(&lastMigration, "SELECT filename FROM schema_migrations ORDER BY applied_at DESC LIMIT 1")
-	if err != nil {
-		return fmt.Errorf("no migrations to rollback")
+	// Determine number of steps to rollback (default: 1)
+	steps := "1"
+	if len(args) > 0 {
+		steps = args[0]
 	}
 
-	logger.Info("Rolling back migration", "file", lastMigration)
+	logger.Info("Rolling back migrations", "environment", atlasEnv, "steps", steps)
+	logger.Warn("WARNING: This operation cannot be undone. Make sure you have backups.")
 
-	// Delete from migrations table
-	_, err = db.Exec("DELETE FROM schema_migrations WHERE filename = $1", lastMigration)
-	if err != nil {
-		return fmt.Errorf("failed to rollback migration: %w", err)
+	// Run Atlas migrate down
+	atlasCmd := exec.Command("atlas", "migrate", "down",
+		"--env", atlasEnv,
+		"--url", dbURL,
+		steps,
+	)
+
+	// Set environment variables
+	atlasCmd.Env = append(os.Environ(),
+		fmt.Sprintf("DATABASE_URL=%s", dbURL),
+	)
+
+	// Capture output
+	output, execErr := atlasCmd.CombinedOutput()
+	if execErr != nil {
+		logger.Error("Failed to rollback migrations", "error", execErr, "output", string(output))
+		return fmt.Errorf("failed to rollback migrations: %w\n%s", execErr, string(output))
 	}
 
-	logger.Info("Migration rolled back successfully")
-	logger.Warn("Note: SQL changes were NOT reverted. You may need to manually undo schema changes.")
+	// Print output
+	fmt.Println(string(output))
+	logger.Info("Migrations rolled back successfully")
 
 	return nil
 }
 
 func runMigrateStatus(_ *cobra.Command, _ []string) error {
-	// Get database connection
-	dbInterface, err := getDB()
+	logger.Info("Checking migration status using Atlas...")
+
+	// Check if Atlas is installed
+	if err := checkAtlasInstalled(); err != nil {
+		return err
+	}
+
+	// Get DATABASE_URL from environment or config
+	dbURL, err := getDatabaseURL()
 	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+		return err
 	}
 
-	db, ok := dbInterface.(*sqlx.DB)
-	if !ok {
-		return fmt.Errorf("invalid database type")
-	}
-	defer func() {
-		if err := db.Close(); err != nil {
-			logger.Error("Failed to close database connection", "error", err)
-		}
-	}()
+	// Get Atlas environment (default: local)
+	atlasEnv := getAtlasEnv()
 
-	// Create migrations table if it doesn't exist
-	if err := createMigrationsTable(db); err != nil {
-		return fmt.Errorf("failed to create migrations table: %w", err)
-	}
+	logger.Info("Checking status", "environment", atlasEnv)
 
-	// Get applied migrations
-	appliedMigrations, err := getAppliedMigrations(db)
+	// Run Atlas migrate status
+	cmd := exec.Command("atlas", "migrate", "status",
+		"--env", atlasEnv,
+		"--url", dbURL,
+	)
+
+	// Set environment variables
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("DATABASE_URL=%s", dbURL),
+	)
+
+	// Capture output
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to get applied migrations: %w", err)
-	}
-
-	// Get migration files
-	migrationFiles, err := getMigrationFiles()
-	if err != nil {
-		return fmt.Errorf("failed to read migration files: %w", err)
-	}
-
-	fmt.Println("\nMigration Status:")
-	fmt.Println("================")
-
-	if len(migrationFiles) == 0 {
-		fmt.Println("No migration files found")
+		// Atlas might return non-zero exit code if there are pending migrations
+		// But we still want to show the status
+		fmt.Println(string(output))
 		return nil
 	}
 
-	pendingCount := 0
-	for _, file := range migrationFiles {
-		if _, applied := appliedMigrations[file]; applied {
-			fmt.Printf("✅ %s (applied)\n", file)
-		} else {
-			fmt.Printf("⏳ %s (pending)\n", file)
-			pendingCount++
-		}
-	}
-
-	fmt.Printf("\nTotal: %d migrations (%d applied, %d pending)\n",
-		len(migrationFiles),
-		len(appliedMigrations),
-		pendingCount)
+	// Print output
+	fmt.Println(string(output))
 
 	return nil
 }
@@ -243,125 +268,165 @@ func runMigrateStatus(_ *cobra.Command, _ []string) error {
 func runMigrateCreate(_ *cobra.Command, args []string) error {
 	migrationName := args[0]
 
-	// Get next migration number
-	files, err := getMigrationFiles()
+	logger.Info("Creating new migration file using Atlas...", "name", migrationName)
+
+	// Check if Atlas is installed
+	if err := checkAtlasInstalled(); err != nil {
+		return err
+	}
+
+	// Get Atlas environment (default: local)
+	atlasEnv := getAtlasEnv()
+
+	// Run Atlas migrate new
+	cmd := exec.Command("atlas", "migrate", "new",
+		"--env", atlasEnv,
+		migrationName,
+	)
+
+	// Capture output
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to read migration files: %w", err)
+		logger.Error("Failed to create migration file", "error", err, "output", string(output))
+		return fmt.Errorf("failed to create migration file: %w\n%s", err, string(output))
 	}
 
-	nextNumber := len(files) + 1
-
-	// Create migration filename
-	filename := fmt.Sprintf("%03d_%s.sql", nextNumber, migrationName)
-	filepath := filepath.Join("migrations", filename)
-
-	// Create migration file
-	content := fmt.Sprintf(`-- Migration: %s
--- Created: %s
---
--- Add your SQL migration here
--- Example:
--- CREATE TABLE example (
---     id SERIAL PRIMARY KEY,
---     name VARCHAR(255) NOT NULL,
---     created_at TIMESTAMP DEFAULT NOW()
--- );
-
-`, migrationName, "now")
-
-	if err := os.WriteFile(filepath, []byte(content), 0644); err != nil {
-		return fmt.Errorf("failed to create migration file: %w", err)
-	}
-
-	logger.Info("Migration file created", "file", filepath)
-	fmt.Printf("✅ Created: %s\n", filepath)
-	fmt.Println("\nEdit this file to add your SQL migration, then run:")
+	// Print output
+	fmt.Println(string(output))
+	logger.Info("Migration file created successfully")
+	fmt.Println("\nEdit the file to add your SQL migration, then run:")
 	fmt.Println("  app migrate up")
+
+	return nil
+}
+
+func runMigrateValidate(_ *cobra.Command, _ []string) error {
+	logger.Info("Validating migration files using Atlas...")
+
+	// Check if Atlas is installed
+	if err := checkAtlasInstalled(); err != nil {
+		return err
+	}
+
+	// Get DATABASE_URL from environment or config
+	dbURL, err := getDatabaseURL()
+	if err != nil {
+		return err
+	}
+
+	// Get Atlas environment (default: local)
+	atlasEnv := getAtlasEnv()
+
+	logger.Info("Validating migrations", "environment", atlasEnv)
+
+	// Run Atlas migrate validate
+	cmd := exec.Command("atlas", "migrate", "validate",
+		"--env", atlasEnv,
+		"--url", dbURL,
+	)
+
+	// Set environment variables
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("DATABASE_URL=%s", dbURL),
+	)
+
+	// Capture output
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		logger.Error("Migration validation failed", "error", err, "output", string(output))
+		return fmt.Errorf("migration validation failed: %w\n%s", err, string(output))
+	}
+
+	// Print output
+	fmt.Println(string(output))
+	logger.Info("Migration validation successful")
 
 	return nil
 }
 
 // Helper functions
 
-func createMigrationsTable(db *sqlx.DB) error {
-	query := `
-		CREATE TABLE IF NOT EXISTS schema_migrations (
-			id SERIAL PRIMARY KEY,
-			filename VARCHAR(255) NOT NULL UNIQUE,
-			applied_at TIMESTAMP DEFAULT NOW()
-		)
-	`
-	_, err := db.Exec(query)
-	return err
-}
-
-func getAppliedMigrations(db *sqlx.DB) (map[string]bool, error) {
-	var migrations []string
-	err := db.Select(&migrations, "SELECT filename FROM schema_migrations ORDER BY applied_at")
+// checkAtlasInstalled checks if Atlas CLI is installed on the system
+func checkAtlasInstalled() error {
+	cmd := exec.Command("atlas", "version")
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, err
+		return fmt.Errorf(`Atlas CLI is not installed. Please install it first:
+
+macOS:
+  brew install ariga/tap/atlas
+
+Linux:
+  curl -sSf https://atlasgo.sh | sh
+
+Windows:
+  Download from https://release.ariga.io/atlas/atlas-windows-amd64-latest.exe
+
+Or use Docker:
+  docker pull arigaio/atlas
+
+For more information, visit: https://atlasgo.io/getting-started/
+
+Error: %w
+Output: %s`, err, string(output))
 	}
 
-	result := make(map[string]bool)
-	for _, m := range migrations {
-		result[m] = true
-	}
-	return result, nil
-}
-
-func getMigrationFiles() ([]string, error) {
-	files, err := os.ReadDir("migrations")
-	if err != nil {
-		return nil, err
-	}
-
-	var migrations []string
-	for _, file := range files {
-		if !file.IsDir() && filepath.Ext(file.Name()) == ".sql" && file.Name() != "README.md" {
-			migrations = append(migrations, file.Name())
-		}
-	}
-
-	return migrations, nil
-}
-
-func applyMigration(db *sqlx.DB, filename string) (err error) {
-	// Read migration file
-	content, readErr := os.ReadFile(filepath.Join("migrations", filename))
-	if readErr != nil {
-		return fmt.Errorf("failed to read migration file: %w", readErr)
-	}
-
-	// Begin transaction
-	tx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	// Ensure rollback on panic or error
-	defer func() {
-		if p := recover(); p != nil {
-			_ = tx.Rollback()
-			panic(p) // Re-throw panic after rollback
-		} else if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
-
-	// Execute migration
-	if _, err = tx.Exec(string(content)); err != nil {
-		return fmt.Errorf("failed to execute migration: %w", err)
-	}
-
-	// Record migration
-	if _, err = tx.Exec("INSERT INTO schema_migrations (filename) VALUES ($1)", filename); err != nil {
-		return fmt.Errorf("failed to record migration: %w", err)
-	}
-
-	// Commit transaction
-	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
+	// Log Atlas version
+	logger.Info("Atlas CLI found", "version", strings.TrimSpace(string(output)))
 	return nil
+}
+
+// getDatabaseURL gets the database connection URL from environment or config
+func getDatabaseURL() (string, error) {
+	// Try DATABASE_URL environment variable first (Twelve-Factor compliant)
+	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+		return dbURL, nil
+	}
+
+	// Try APP_DATABASE_URL as an alternative
+	if dbURL := os.Getenv("APP_DATABASE_URL"); dbURL != "" {
+		return dbURL, nil
+	}
+
+	// Build from individual config values
+	cfg := getConfig()
+	if cfg == nil {
+		return "", fmt.Errorf("configuration not loaded")
+	}
+
+	// Build connection string based on driver
+	var dbURL string
+	switch cfg.Database.Driver {
+	case "postgres":
+		dbURL = fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
+			cfg.Database.User,
+			cfg.Database.Password,
+			cfg.Database.Host,
+			cfg.Database.Port,
+			cfg.Database.DBName,
+			cfg.Database.SSLMode,
+		)
+	case "mysql":
+		dbURL = fmt.Sprintf("mysql://%s:%s@tcp(%s:%d)/%s",
+			cfg.Database.User,
+			cfg.Database.Password,
+			cfg.Database.Host,
+			cfg.Database.Port,
+			cfg.Database.DBName,
+		)
+	case "sqlite":
+		dbURL = fmt.Sprintf("sqlite://%s", cfg.Database.DBName)
+	default:
+		return "", fmt.Errorf("unsupported database driver: %s", cfg.Database.Driver)
+	}
+
+	return dbURL, nil
+}
+
+// getAtlasEnv returns the Atlas environment to use (default: local)
+func getAtlasEnv() string {
+	if env := os.Getenv("ATLAS_ENV"); env != "" {
+		return env
+	}
+	return "local"
 }

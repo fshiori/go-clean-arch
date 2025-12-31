@@ -50,6 +50,29 @@ make build-all           # Cross-compile for multiple platforms
 wire gen ./internal/app
 ```
 
+### Database Migrations (Atlas)
+```bash
+# Apply all pending migrations
+make migrate-up
+# or
+./app migrate up
+
+# Show migration status
+make migrate-status
+
+# Create a new migration
+make migrate-create NAME="add_products_table"
+
+# Rollback last migration
+make migrate-down
+
+# Validate migration files
+make migrate-validate
+
+# Install Atlas CLI (if not installed)
+make atlas-install
+```
+
 ---
 
 ## Critical Context ⚠️
@@ -80,6 +103,7 @@ wire gen ./internal/app
 - **HTTP Framework**: Gin
 - **Database**: sqlx (PostgreSQL, MySQL, SQLite)
 - **SQL Query Builder**: Squirrel (fluent SQL generation)
+- **Database Migrations**: Atlas (versioned migrations with validation)
 - **Dependency Injection**: Wire (compile-time)
 - **Configuration**: Viper (YAML + env vars)
 - **Logging**: slog (structured logging with trace IDs)

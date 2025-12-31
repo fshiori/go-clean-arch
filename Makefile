@@ -106,12 +106,43 @@ docker-run-worker: ## Run worker in Docker
 docker-run-cron: ## Run cron in Docker
 	docker run --env-file .env $(APP_NAME):latest --mode=cron
 
-migrate-up: ## Run database migrations
+migrate-up: ## Run database migrations using Atlas
 	@echo "Running migrations..."
-	# Add your migration tool command here
+	$(GO) run ./cmd/app/main.go migrate up
 
-migrate-down: ## Rollback database migrations
+migrate-down: ## Rollback database migrations using Atlas
 	@echo "Rolling back migrations..."
-	# Add your migration tool command here
+	$(GO) run ./cmd/app/main.go migrate down
+
+migrate-status: ## Show migration status using Atlas
+	@echo "Checking migration status..."
+	$(GO) run ./cmd/app/main.go migrate status
+
+migrate-create: ## Create new migration file using Atlas (usage: make migrate-create NAME="add_users_table")
+	@if [ -z "$(NAME)" ]; then \
+		echo "Error: NAME is required. Usage: make migrate-create NAME=\"add_users_table\""; \
+		exit 1; \
+	fi
+	$(GO) run ./cmd/app/main.go migrate create "$(NAME)"
+
+migrate-validate: ## Validate migration files using Atlas
+	@echo "Validating migration files..."
+	$(GO) run ./cmd/app/main.go migrate validate
+
+atlas-install: ## Install Atlas CLI
+	@echo "Installing Atlas CLI..."
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		echo "Installing on macOS..."; \
+		brew install ariga/tap/atlas; \
+	elif [ "$$(uname)" = "Linux" ]; then \
+		echo "Installing on Linux..."; \
+		curl -sSf https://atlasgo.sh | sh; \
+	else \
+		echo "Unsupported platform. Please visit https://atlasgo.io/getting-started/"; \
+		exit 1; \
+	fi
+
+atlas-version: ## Show Atlas CLI version
+	@atlas version || echo "Atlas not installed. Run 'make atlas-install'"
 
 .DEFAULT_GOAL := help

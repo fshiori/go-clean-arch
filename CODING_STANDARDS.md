@@ -1982,11 +1982,47 @@ If your project currently uses plain sqlx (without Squirrel):
 ### Migration Files
 
 **IMPORTANT**: Database migrations are **mandatory** when using sqlx (unlike GORM which has AutoMigrate).
-You must use migration tools like [golang-migrate](https://github.com/golang-migrate/migrate) or [goose](https://github.com/pressly/goose).
+This project uses **[Atlas](https://atlasgo.io/)** as the default migration tool for its modern features:
+- Versioned migrations with automatic tracking
+- Schema validation and safety checks
+- Multiple database support (PostgreSQL, MySQL, SQLite)
+- Team collaboration with timestamp-based naming
 
+**Alternative tools**: [golang-migrate](https://github.com/golang-migrate/migrate), [goose](https://github.com/pressly/goose)
+
+**Installation:**
+```bash
+# macOS
+brew install ariga/tap/atlas
+
+# Linux
+curl -sSf https://atlasgo.sh | sh
+
+# Or use Make
+make atlas-install
+```
+
+**Quick Commands:**
+```bash
+# Apply all pending migrations
+make migrate-up
+
+# Show migration status
+make migrate-status
+
+# Create a new migration
+make migrate-create NAME="add_products_table"
+
+# Rollback last migration
+make migrate-down
+
+# Validate migration files
+make migrate-validate
+```
+
+**Migration File Example:**
 ```sql
 -- migrations/001_create_users_table.sql
--- +migrate Up
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -1996,10 +2032,9 @@ CREATE TABLE users (
 );
 
 CREATE INDEX idx_users_email ON users(email);
-
--- +migrate Down
-DROP TABLE IF EXISTS users;
 ```
+
+**Note**: Atlas uses timestamp-based naming for new migrations (e.g., `20240115120000_add_products_table.sql`) to avoid conflicts in team environments. See [migrations/README.md](migrations/README.md) for detailed usage.
 
 ### Repository Patterns
 
