@@ -77,32 +77,32 @@ make atlas-install
 
 ## Critical Context ⚠️
 
+### Current Status
+✅ **Security**: Password hashing uses bcrypt (`internal/domain/user.go:119-136`)
+✅ **Architecture**: All runtime modes include complete dependency sets
+✅ **Lifecycle**: Graceful shutdown implemented for all modes (API, Worker, Cron)
+✅ **Domain**: Entity reconstruction with `ReconstructUser()` properly implemented
+
 ### Known Issues
-1. **SECURITY**: Password hashing is insecure (`internal/domain/user.go:67-74`)
-   - Currently uses `"hashed_" + password` prefix
-   - Must replace with bcrypt/argon2 before production
+1. **TESTING**: Test coverage is partial
+   - Repository layer has tests (`*_repository_sqlx_test.go`)
+   - Need more comprehensive test coverage for:
+     - Domain layer (business logic validation)
+     - Use case layer (interactor logic)
+     - Handler layer (HTTP request/response)
+   - Target: 90%+ coverage for domain/use case layers
 
-2. **ARCHITECTURE**: GatewaySet missing in API mode
-   - `InitializeAPIRouter()` doesn't include `GatewaySet` (`internal/app/wire.go:66-75`)
-   - PaymentGateway unavailable in API mode
-   - Worker and Cron modes correctly include it
-
-3. **DOMAIN**: Entity reconstruction issue
-   - Repositories cannot properly hydrate User entities with password hash
-   - Need `ReconstructUser()` factory method to maintain encapsulation
-
-4. **LIFECYCLE**: No graceful shutdown implemented yet
-   - Must implement signal handling for SIGTERM/SIGINT
-   - Critical for Twelve-Factor compliance (Factor IX)
-
-5. **TESTING**: No tests exist yet
-   - Need to implement tests for all layers
+2. **FILE NAMING**: Some repository files have inconsistent naming
+   - `order_repository_gorm.go` actually uses sqlx (not GORM)
+   - Consider renaming for clarity
 
 ### Tech Stack
 - **Go**: 1.24+
 - **HTTP Framework**: Gin
-- **Database**: sqlx (PostgreSQL, MySQL, SQLite)
-- **SQL Query Builder**: Squirrel (fluent SQL generation)
+- **Database Access**:
+  - **sqlc** (primary - type-safe SQL queries for static queries)
+  - **sqlx + Squirrel** (auxiliary - dynamic query building)
+  - Supports: PostgreSQL, MySQL, SQLite
 - **Database Migrations**: Atlas (versioned migrations with validation)
 - **Dependency Injection**: Wire (compile-time)
 - **Configuration**: Viper (YAML + env vars)
@@ -218,35 +218,55 @@ type ProductRepository interface {
 ```
 
 **Step 3: Implement Repository**
-```go
-// internal/adapter/repository/product_model.go
-type ProductDBModel struct {
-    ID        int64     `db:"id"`
-    Name      string    `db:"name"`
-    Price     int64     `db:"price"`
-    CreatedAt time.Time `db:"created_at"`
-    UpdatedAt time.Time `db:"updated_at"`
-}
 
-func (m *ProductDBModel) ToDomain() *domain.Product { ... }
-func FromDomain(p *domain.Product) *ProductDBModel { ... }
+For static queries (recommended - use sqlc):
+```go
+// internal/adapter/repository/sqlc/query.sql
+-- name: GetProduct :one
+SELECT * FROM products WHERE id = ? LIMIT 1;
+
+-- name: CreateProduct :exec
+INSERT INTO products (name, price, created_at, updated_at)
+VALUES (?, ?, ?, ?);
 ```
 
+For dynamic queries (use sqlx + Squirrel):
 ```go
-// internal/adapter/repository/product_repository_sqlx.go
+// internal/adapter/repository/product_repository_sqlc.go
 import (
     "github.com/Masterminds/squirrel"
     "github.com/jmoiron/sqlx"
+    "go-clean-arch/internal/adapter/repository/sqlcgen"
 )
 
-var psql = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+var mysql = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
-type ProductRepositorySQLX struct {
-    db *sqlx.DB
+type productRepositorySQLC struct {
+    db      *sqlx.DB
+    queries *sqlcgen.Queries
 }
 
-func NewProductRepository(db *sqlx.DB) *ProductRepositorySQLX { ... }
-func (r *ProductRepositorySQLX) Save(ctx context.Context, product *domain.Product) error { ... }
+func NewProductRepository(db *sqlx.DB) port.ProductRepository {
+    return &productRepositorySQLC{
+        db:      db,
+        queries: sqlcgen.New(db.DB),
+    }
+}
+
+// Use sqlc for static queries
+func (r *productRepositorySQLC) FindByID(ctx context.Context, id int64) (*domain.Product, error) {
+    product, err := r.queries.GetProduct(ctx, id)
+    // ... convert to domain
+}
+
+// Use Squirrel for dynamic queries (e.g., search with filters)
+func (r *productRepositorySQLC) Search(ctx context.Context, filters ProductFilters) ([]*domain.Product, error) {
+    query := mysql.Select("*").From("products")
+    if filters.MinPrice > 0 {
+        query = query.Where(squirrel.GtOrEq{"price": filters.MinPrice})
+    }
+    // ... build and execute dynamic query
+}
 ```
 
 **Step 4: Create Use Case**
@@ -347,8 +367,10 @@ wire gen ./internal/app
 | Gateway Interface | `internal/usecase/port/{service}_gateway.go` | `payment_gateway.go` |
 | Use Case Interface | `internal/usecase/interfaces.go` | Single file for all interfaces |
 | Use Case Implementation | `internal/usecase/{entity}_interactor.go` | `user_interactor.go` |
-| Repository Implementation | `internal/adapter/repository/{entity}_repository_sqlx.go` | `user_repository_sqlx.go` |
-| DB Model | `internal/adapter/repository/{entity}_model.go` | `user_model.go` |
+| Repository Implementation | `internal/adapter/repository/{entity}_repository_sqlc.go` | `user_repository_sqlc.go` |
+| DB Model (for sqlx) | `internal/adapter/repository/{entity}_model.go` | `user_model.go`, `order_model.go` |
+| sqlc Queries | `internal/adapter/repository/sqlc/query.sql` | SQL definitions for sqlc |
+| sqlc Generated Code | `internal/adapter/repository/sqlcgen/*.go` | Auto-generated by sqlc |
 | Gateway Implementation | `internal/adapter/gateway/{service}_gateway.go` | `stripe_gateway.go` |
 | HTTP Handler | `internal/delivery/http/handler/{entity}_handler.go` | `user_handler.go` |
 | HTTP DTO | `internal/delivery/http/handler/{entity}_dto.go` | `user_dto.go` |

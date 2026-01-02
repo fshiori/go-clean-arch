@@ -90,7 +90,7 @@ For detailed architecture documentation, see [CODING_STANDARDS.md](CODING_STANDA
 ### Prerequisites
 
 - Go 1.24 or higher
-- MySQL (PostgreSQL support coming soon)
+- Database: PostgreSQL, MySQL, or SQLite
 - RabbitMQ (for worker mode, optional)
 
 ### Installation
@@ -373,10 +373,13 @@ For detailed design decisions, see [CODING_STANDARDS.md](CODING_STANDARDS.md).
 
 - **Language**: Go 1.24+
 - **HTTP Framework**: Gin
-- **Database**: sqlx (lightweight, performant database access)
-- **SQL Query Builder**: Squirrel (type-safe SQL generation)
+- **Database Access**:
+  - **sqlc** (primary - type-safe SQL queries for static queries)
+  - **sqlx + Squirrel** (auxiliary - dynamic query building)
+  - Supports: PostgreSQL, MySQL, SQLite
+- **Database Migrations**: Atlas (versioned migrations with validation)
 - **Dependency Injection**: Wire (compile-time)
-- **Configuration**: Viper
+- **Configuration**: Viper (environment-first, config files optional)
 - **Logging**: slog (structured logging)
 - **Microservices**: go-micro v5
 - **Message Queue**: RabbitMQ

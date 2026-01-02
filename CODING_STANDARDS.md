@@ -508,73 +508,109 @@ func FromDomain(user *domain.User) *UserDBModel {
     }
 }
 
-// ✅ Good: Repository implements port interface using sqlx + Squirrel
-// internal/adapter/repository/user_repository_sqlx.go
+// ✅ Good: Repository implements port interface using sqlc + sqlx+Squirrel
+// internal/adapter/repository/user_repository_sqlc.go
 import (
     "context"
     "database/sql"
     "errors"
-    "fmt"
 
     "github.com/Masterminds/squirrel"
     "github.com/jmoiron/sqlx"
+    "go-clean-arch/internal/adapter/repository/sqlcgen"
     "go-clean-arch/internal/domain"
+    "go-clean-arch/internal/usecase/port"
 )
 
-// PostgreSQL uses $1, $2 placeholders (use squirrel.Question for MySQL)
-var psql = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+// MySQL uses ? placeholders (use squirrel.Dollar for PostgreSQL)
+var mysql = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
-type UserRepositorySQLX struct {
-    db *sqlx.DB
+type userRepositorySQLC struct {
+    db      *sqlx.DB
+    queries *sqlcgen.Queries
 }
 
-func NewUserRepository(db *sqlx.DB) *UserRepositorySQLX {
-    return &UserRepositorySQLX{db: db}
+func NewUserRepository(db *sqlx.DB) port.UserRepository {
+    return &userRepositorySQLC{
+        db:      db,
+        queries: sqlcgen.New(db.DB),
+    }
 }
 
-func (r *UserRepositorySQLX) Save(ctx context.Context, user *domain.User) error {
-    model := FromDomain(user)
+// Use sqlc for static queries (type-safe, compile-time validated)
+func (r *userRepositorySQLC) Save(ctx context.Context, user *domain.User) error {
+    now := time.Now().UTC()
 
-    // Build SQL with Squirrel
-    query, args, err := psql.Insert("users").
-        Columns("email", "password_hash", "created_at", "updated_at").
-        Values(model.Email, model.PasswordHash, model.CreatedAt, model.UpdatedAt).
-        Suffix("RETURNING id").  // PostgreSQL-specific
-        ToSql()
-
+    result, err := r.queries.CreateUser(ctx, sqlcgen.CreateUserParams{
+        Email:        user.Email,
+        PasswordHash: user.Password(),
+        CreatedAt:    now,
+        UpdatedAt:    now,
+    })
     if err != nil {
-        return fmt.Errorf("failed to build query: %w", err)
+        return oops.Code("DB_INSERT_FAILED").Wrapf(err, "failed to insert user")
     }
 
-    // Execute with sqlx
-    err = r.db.QueryRowxContext(ctx, query, args...).Scan(&model.ID)
+    id, err := result.LastInsertId()
     if err != nil {
-        return fmt.Errorf("failed to insert user: %w", err)
+        return oops.Wrapf(err, "failed to get last insert ID")
     }
 
+    user.ID = id
+    user.CreatedAt = now
+    user.UpdatedAt = now
     return nil
 }
 
-func (r *UserRepositorySQLX) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
-    query, args, err := psql.Select("*").
+func (r *userRepositorySQLC) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
+    user, err := r.queries.GetUserByEmail(ctx, email)
+    if err != nil {
+        if errors.Is(err, sql.ErrNoRows) {
+            return nil, domain.ErrUserNotFound
+        }
+        return nil, oops.Wrapf(err, "database query failed")
+    }
+
+    return sqlcUserToDomain(&user), nil
+}
+
+// Use sqlx+Squirrel for dynamic queries (flexible query building)
+func (r *userRepositorySQLC) List(ctx context.Context, offset, limit int) ([]*domain.User, error) {
+    query, args, err := mysql.
+        Select("id", "email", "password_hash", "created_at", "updated_at").
         From("users").
-        Where(squirrel.Eq{"email": email}).
+        OrderBy("created_at DESC").
+        Limit(uint64(limit)).
+        Offset(uint64(offset)).
         ToSql()
 
     if err != nil {
-        return nil, fmt.Errorf("failed to build query: %w", err)
+        return nil, oops.Wrapf(err, "failed to build query")
     }
 
-    var model UserDBModel
-    err = r.db.GetContext(ctx, &model, query, args...)
+    var sqlcUsers []sqlcgen.User
+    err = r.db.SelectContext(ctx, &sqlcUsers, query, args...)
     if err != nil {
-        if errors.Is(err, sql.ErrNoRows) {
-            return nil, nil  // or return domain.ErrUserNotFound
-        }
-        return nil, fmt.Errorf("database error: %w", err)
+        return nil, oops.Wrapf(err, "failed to list users")
     }
 
-    return model.ToDomain(), nil
+    users := make([]*domain.User, len(sqlcUsers))
+    for i, sqlcUser := range sqlcUsers {
+        users[i] = sqlcUserToDomain(&sqlcUser)
+    }
+
+    return users, nil
+}
+
+// Helper to convert sqlc-generated User to domain.User
+func sqlcUserToDomain(sqlcUser *sqlcgen.User) *domain.User {
+    return domain.ReconstructUser(
+        sqlcUser.ID,
+        sqlcUser.Email,
+        sqlcUser.PasswordHash,
+        sqlcUser.CreatedAt,
+        sqlcUser.UpdatedAt,
+    )
 }
 ```
 
@@ -1887,15 +1923,21 @@ export APP_DATABASE_PASSWORD=$(vault read -field=password secret/db)
 
 This project adopts a **"sqlc primary, sqlx+Squirrel auxiliary"** approach for database access.
 
+**✅ Current Implementation: "sqlc primary, sqlx+Squirrel auxiliary"**
+
+This project uses a **hybrid approach** combining the best of both tools:
+
 **Primary Tool (sqlc):**
 - ✅ **USE FOR**: All static queries (INSERT, UPDATE specific fields, SELECT by ID, fixed JOINs)
 - ✅ **BENEFITS**: Strict type safety, compile-time query validation, best performance
 - ✅ **IDEAL FOR**: CRUD operations, simple queries, queries that rarely change
+- 📁 **Implementation**: `user_repository_sqlc.go` uses sqlc for FindByID, Save, Update, Delete
 
 **Secondary Tool (sqlx + Squirrel):**
 - ✅ **USE FOR**: Dynamic search queries (listing APIs with multiple optional filters)
 - ✅ **BENEFITS**: Flexible query building, handles dynamic WHERE clauses elegantly
 - ✅ **IDEAL FOR**: Complex search, filtering, pagination with dynamic conditions
+- 📁 **Implementation**: `user_repository_sqlc.go` uses Squirrel for List() with pagination
 
 **Decision Matrix:**
 
@@ -1968,14 +2010,18 @@ func (r *Repo) SearchProducts(ctx context.Context, filters ProductFilters) ([]*d
 }
 ```
 
-**Migration Path:**
+**✅ Implementation Status:**
+
+This project has **already implemented** the hybrid approach:
+- ✅ `user_repository_sqlc.go` - Uses sqlc for static queries + Squirrel for dynamic List()
+- ⚠️ `order_repository_sqlx.go` - Currently uses plain sqlx (consider migrating to sqlc pattern)
+
+**Migration Path for Other Projects:**
 
 If your project currently uses plain sqlx (without Squirrel):
 1. Identify static queries → migrate to **sqlc**
 2. Identify dynamic queries → migrate to **sqlx + Squirrel**
 3. Update CODING_STANDARDS.md examples to reflect the chosen approach
-
-**Note:** This project's example code currently uses plain sqlx. Teams should evaluate whether to migrate to sqlc for static queries based on project requirements.
 
 ---
 
