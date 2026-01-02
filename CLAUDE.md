@@ -13,10 +13,10 @@ For human developers, see:
 ### Development
 ```bash
 # Run different modes
-go run cmd/app/main.go --mode=api       # Start API server on :8080
-go run cmd/app/main.go --mode=worker    # Start message queue worker
-go run cmd/app/main.go --mode=cron      # Start cron scheduler
-./app micro                             # Start microservice mode on :8081
+go run cmd/app/main.go api              # Start API server on :8080
+go run cmd/app/main.go worker           # Start message queue worker
+go run cmd/app/main.go cron             # Start cron scheduler
+go run cmd/app/main.go micro            # Start microservice mode on :8081
 
 # Makefile shortcuts
 make run-api
@@ -89,9 +89,10 @@ make atlas-install
   - Tests use mocks for clean unit testing
 
 ### Known Issues
-1. **TESTING**: Handler layer tests missing
-   - Need to add tests for HTTP handlers (delivery layer)
-   - Target: 70%+ coverage for handler layer
+1. **TESTING**: Handler layer test coverage is low (29.5%)
+   - `user_handler_test.go` exists with comprehensive tests
+   - Missing tests for `order_handler.go` and `health_handler.go`
+   - Current coverage: 29.5%, Target: 70%+
 
 2. **ORDER CHECKOUT**: One failing test in order_interactor_test.go
    - `TestCheckout_OrderNotPending` - status transition validation needs review
@@ -165,7 +166,7 @@ make atlas-install
    - Keeps domain pure and focused on business rules
 
 2. **Single binary, multiple runtime modes**
-   - Mode selected via CLI flag: `--mode=api|worker|cron|micro`
+   - Mode selected via Cobra subcommands: `api|worker|cron|micro|migrate`
    - Shared business logic across all modes
    - Cobra CLI framework handles commands
 
@@ -403,7 +404,6 @@ wire gen ./internal/app
 - ✅ **DO** provide `config.example.toml` for local dev
 
 ### Security
-- ⚠️ **CRITICAL**: Current password hashing is insecure
 - ❌ **DON'T** commit secrets in config files
 - ❌ **DON'T** log sensitive data (passwords, tokens)
 
@@ -434,7 +434,10 @@ wire gen ./internal/app
 - **Handler**: Mock use cases, test request/response mapping
 
 ### Current Status
-- ⚠️ **No tests exist yet** - need to implement tests for all layers
+- **Domain layer**: 93.8% coverage ✅ (meets 90%+ target)
+- **Use case layer**: 86.9% coverage ⚠️ (near 90% target, has 1 failing test)
+- **Handler layer**: 29.5% coverage ❌ (far below 70%+ target)
+- **Repository layer**: Not tested yet ⚠️ (target: 80%+)
 
 ---
 
@@ -500,7 +503,6 @@ logger.ErrorContext(ctx, "Failed to save", "error", err)
 **API Mode**:
 - Serves REST API endpoints
 - Health check: `GET /health`
-- ⚠️ Missing GatewaySet in wire config
 
 **Worker Mode**:
 - Consumes messages from RabbitMQ
