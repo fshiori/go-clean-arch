@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: go-clean-arch-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: go_clean_arch
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  # RabbitMQ Message Queue
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: go-clean-arch-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI
+    networks:
+      - app-network
+
+  # API Server
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: go-clean-arch-api
+    command: ["api"]  # No --config flag needed (Twelve-Factor compliant)
+    ports:
+      - "8080:8080"
+    environment:
+      # Twelve-Factor App compliant configuration via environment variables
+      # All variables use APP_ prefix to override defaults
+      APP_SERVER_PORT: 8080
+      APP_DATABASE_HOST: postgres
+      APP_DATABASE_PORT: 5432
+      APP_DATABASE_USER: postgres
+      APP_DATABASE_PASSWORD: postgres
+      APP_DATABASE_DBNAME: go_clean_arch
+      APP_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      APP_LOGGER_LEVEL: info
+      APP_LOGGER_FORMAT: json
+    depends_on:
+      - postgres
+      - rabbitmq
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: go-clean-arch-worker
+    command: ["worker"]  # No --config flag needed (Twelve-Factor compliant)
+    environment:
+      # Twelve-Factor App compliant configuration via environment variables
+      APP_DATABASE_HOST: postgres
+      APP_DATABASE_PORT: 5432
+      APP_DATABASE_USER: postgres
+      APP_DATABASE_PASSWORD: postgres
+      APP_DATABASE_DBNAME: go_clean_arch
+      APP_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      APP_RABBITMQ_QUEUE_NAME: order_queue
+      APP_LOGGER_LEVEL: info
+      APP_LOGGER_FORMAT: json
+    depends_on:
+      - postgres
+      - rabbitmq
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Cron Scheduler
+  cron:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: go-clean-arch-cron
+    command: ["cron"]  # No --config flag needed (Twelve-Factor compliant)
+    environment:
+      # Twelve-Factor App compliant configuration via environment variables
+      APP_DATABASE_HOST: postgres
+      APP_DATABASE_PORT: 5432
+      APP_DATABASE_USER: postgres
+      APP_DATABASE_PASSWORD: postgres
+      APP_DATABASE_DBNAME: go_clean_arch
+      APP_CRON_DAILY_REPORT_SCHEDULE: "0 0 * * *"
+      APP_LOGGER_LEVEL: info
+      APP_LOGGER_FORMAT: json
+    depends_on:
+      - postgres
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

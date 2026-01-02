@@ -1,0 +1,43 @@
+# Production Configuration Example
+# IMPORTANT: Config files are OPTIONAL and NOT RECOMMENDED for production!
+#
+# Twelve-Factor App Compliance (Factor III - Config):
+# - Production deployments should use ONLY environment variables
+# - This file is provided as a reference/template only
+# - DO NOT bundle this file into Docker images
+# - DO NOT commit sensitive values to version control
+#
+# Use environment variables to override all values:
+#   APP_DATABASE_PASSWORD=secret
+#   APP_STRIPE_API_KEY=sk_live_xxx
+#   APP_RABBITMQ_URL=amqp://user:pass@rabbitmq.prod:5672/
+
+[server]
+port = 8080
+host = "0.0.0.0"
+mode = "release"  # release mode for production
+
+[database]
+driver = "postgres"
+host = "db.example.com"  # Override with APP_DATABASE_HOST
+port = 5432
+user = "app_user"        # Override with APP_DATABASE_USER
+password = ""            # Set via APP_DATABASE_PASSWORD environment variable
+dbname = "go_clean_arch_prod"
+sslmode = "require"      # Enable SSL for production
+auto_migrate = false     # Disable auto-migration in production
+
+[rabbitmq]
+url = ""                 # Set via APP_RABBITMQ_URL environment variable
+queue_name = "order_queue"
+
+[cron]
+daily_report_schedule = "0 0 * * *"
+
+[stripe]
+api_key = ""             # Set via APP_STRIPE_API_KEY environment variable
+secret_key = ""          # Set via APP_STRIPE_SECRET_KEY environment variable
+
+[logger]
+level = "info"           # Use info level for production
+format = "json"          # JSON format for structured logging

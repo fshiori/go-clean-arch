@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package user;
+
+option go_package = "go-clean-arch/proto/user;user";
+
+// UserService provides user management operations
+service UserService {
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+  rpc UpdatePassword(UpdatePasswordRequest) returns (UpdatePasswordResponse);
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+}
+
+message CreateUserRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message CreateUserResponse {
+  int64 id = 1;
+  string email = 2;
+  string created_at = 3;
+  string updated_at = 4;
+}
+
+message GetUserRequest {
+  int64 id = 1;
+}
+
+message GetUserResponse {
+  int64 id = 1;
+  string email = 2;
+  string created_at = 3;
+  string updated_at = 4;
+}
+
+message ListUsersRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+}
+
+message ListUsersResponse {
+  repeated UserInfo users = 1;
+  int32 total_count = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message UserInfo {
+  int64 id = 1;
+  string email = 2;
+  string created_at = 3;
+  string updated_at = 4;
+}
+
+message UpdatePasswordRequest {
+  int64 id = 1;
+  string old_password = 2;
+  string new_password = 3;
+}
+
+message UpdatePasswordResponse {
+  string message = 1;
+}
+
+message DeleteUserRequest {
+  int64 id = 1;
+}
+
+message DeleteUserResponse {
+  string message = 1;
+}
