@@ -187,6 +187,8 @@ The API server will start on `http://localhost:8080`
 
 The worker will start consuming messages from the message queue.
 
+**Note**: Worker mode is currently a skeleton implementation. RabbitMQ integration is commented out (marked as TODO). See `internal/delivery/consumer/` for implementation details.
+
 #### Cron Scheduler Mode
 
 ```bash
