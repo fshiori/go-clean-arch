@@ -2149,6 +2149,502 @@ func (r *OrderRepository) CreateOrderWithItems(ctx context.Context, order *domai
 }
 ```
 
+#### Unit of Work Pattern for Cross-Repository Transactions
+
+The above `Transaction Handling` section shows how to use transactions **within a single repository**. However, when you need to execute operations **across multiple repositories** while maintaining **atomicity** (ACID properties), you should use the **Unit of Work (UOW)** pattern.
+
+**When to use Unit of Work**:
+- Creating an order and updating user points (Order + User repositories)
+- Transferring funds between accounts (Account repository, multiple operations)
+- Creating a post and updating category statistics (Post + Category repositories)
+- Any operation requiring multiple repositories to participate in a single transaction
+
+**Why Unit of Work?**
+- ✅ **Atomicity**: All operations succeed or all fail together
+- ✅ **Consistency**: Maintains database integrity across multiple tables
+- ✅ **Clean Architecture**: Keeps transaction management out of use cases
+- ✅ **Testability**: Easy to mock for unit testing
+- ✅ **Reusability**: Can be used across different use cases
+
+##### Step 1: Define Unit of Work Interface (Use Case Layer)
+
+Following the **Dependency Inversion Principle**, the interface is defined in the use case layer (`internal/usecase/port/`):
+
+```go
+// internal/usecase/port/unit_of_work.go
+package port
+
+import "context"
+
+// UnitOfWork manages database transactions across multiple repositories
+// This interface is defined in the use case layer, following Clean Architecture
+type UnitOfWork interface {
+    // Do executes a function within a database transaction
+    // If the function returns an error, the transaction is rolled back
+    // If the function succeeds, the transaction is committed
+    Do(ctx context.Context, fn func(ctx context.Context) error) error
+    
+    // DoWithRepositories executes a function with transaction-aware repositories
+    // This is the preferred method as it ensures all repositories use the same transaction
+    DoWithRepositories(ctx context.Context, fn func(ctx context.Context, repos Repositories) error) error
+}
+
+// Repositories aggregates all repositories that may participate in transactions
+// Add more repositories as needed
+type Repositories struct {
+    UserRepo  UserRepository
+    OrderRepo OrderRepository
+    // Add other repositories here as your application grows
+    // ProductRepo ProductRepository
+    // PaymentRepo PaymentRepository
+}
+```
+
+##### Step 2: Implement Unit of Work (Adapter Layer)
+
+The implementation resides in the adapter layer (`internal/adapter/repository/`):
+
+```go
+// internal/adapter/repository/unit_of_work.go
+package repository
+
+import (
+    "context"
+    "database/sql"
+    "go-clean-arch/internal/usecase/port"
+    
+    "github.com/jmoiron/sqlx"
+    "github.com/samber/oops"
+)
+
+type unitOfWork struct {
+    db *sqlx.DB
+}
+
+// NewUnitOfWork creates a new Unit of Work implementation
+func NewUnitOfWork(db *sqlx.DB) port.UnitOfWork {
+    return &unitOfWork{db: db}
+}
+
+// Do executes a function within a transaction
+func (u *unitOfWork) Do(ctx context.Context, fn func(ctx context.Context) error) error {
+    // Begin transaction
+    tx, err := u.db.BeginTxx(ctx, nil)
+    if err != nil {
+        return oops.
+            Code("UOW_BEGIN_FAILED").
+            In("repository").
+            Tags("database", "transaction").
+            Hint("Check database connection and transaction isolation settings").
+            Wrapf(err, "failed to begin transaction")
+    }
+
+    // Store transaction in context for repositories to use
+    ctx = context.WithValue(ctx, txKey{}, tx)
+
+    // Execute the function
+    err = fn(ctx)
+    if err != nil {
+        // Rollback on error
+        if rbErr := tx.Rollback(); rbErr != nil {
+            return oops.
+                Code("UOW_ROLLBACK_FAILED").
+                In("repository").
+                Tags("database", "transaction", "rollback").
+                With("original_error", err.Error()).
+                Hint("Transaction rollback failed - data may be in inconsistent state").
+                Wrapf(rbErr, "failed to rollback transaction")
+        }
+        return err
+    }
+
+    // Commit transaction
+    if err := tx.Commit(); err != nil {
+        return oops.
+            Code("UOW_COMMIT_FAILED").
+            In("repository").
+            Tags("database", "transaction", "commit").
+            Hint("Commit failed - check for constraint violations or deadlocks").
+            Wrapf(err, "failed to commit transaction")
+    }
+
+    return nil
+}
+
+// DoWithRepositories executes a function with transaction-aware repositories
+func (u *unitOfWork) DoWithRepositories(ctx context.Context, fn func(ctx context.Context, repos port.Repositories) error) error {
+    return u.Do(ctx, func(ctx context.Context) error {
+        // Get the transaction from context
+        tx := GetTx(ctx)
+        if tx == nil {
+            return oops.
+                Code("UOW_TX_NOT_FOUND").
+                In("repository").
+                Errorf("transaction not found in context")
+        }
+
+        // Create transaction-aware repository instances
+        repos := port.Repositories{
+            UserRepo:  NewUserRepositoryWithTx(tx),
+            OrderRepo: NewOrderRepositoryWithTx(tx),
+            // Add other repositories as needed
+        }
+
+        // Execute the function with transaction-aware repositories
+        return fn(ctx, repos)
+    })
+}
+
+// txKey is a private type used as a key in context.Context
+// This prevents collisions with other packages using context
+type txKey struct{}
+
+// GetTx retrieves the transaction from context
+// Returns nil if no transaction is found
+func GetTx(ctx context.Context) *sqlx.Tx {
+    if tx, ok := ctx.Value(txKey{}).(*sqlx.Tx); ok {
+        return tx
+    }
+    return nil
+}
+```
+
+##### Step 3: Modify Repositories to Support Transactions
+
+Update your repository implementations to support both standalone and transactional modes:
+
+```go
+// internal/adapter/repository/user_repository_sqlc.go
+package repository
+
+import (
+    "go-clean-arch/internal/adapter/repository/sqlcgen"
+    "go-clean-arch/internal/usecase/port"
+    "github.com/jmoiron/sqlx"
+)
+
+type userRepositorySQLC struct {
+    db      *sqlx.DB      // Used for standalone operations
+    tx      *sqlx.Tx      // Used when part of a transaction
+    queries *sqlcgen.Queries
+}
+
+// NewUserRepository creates a repository for standalone use
+func NewUserRepository(db *sqlx.DB) port.UserRepository {
+    return &userRepositorySQLC{
+        db:      db,
+        queries: sqlcgen.New(db.DB),
+    }
+}
+
+// NewUserRepositoryWithTx creates a repository that uses a specific transaction
+// This is called by UnitOfWork.DoWithRepositories
+func NewUserRepositoryWithTx(tx *sqlx.Tx) port.UserRepository {
+    return &userRepositorySQLC{
+        tx:      tx,
+        queries: sqlcgen.New(tx.Tx),
+    }
+}
+
+// getExecutor returns the appropriate executor (db or tx)
+func (r *userRepositorySQLC) getExecutor() sqlx.ExtContext {
+    if r.tx != nil {
+        return r.tx
+    }
+    return r.db
+}
+
+// Example method using getExecutor
+func (r *userRepositorySQLC) FindByID(ctx context.Context, id int64) (*domain.User, error) {
+    // sqlc queries automatically use the correct executor (db.DB or tx.Tx)
+    user, err := r.queries.GetUserByID(ctx, id)
+    if err != nil {
+        // Error handling...
+    }
+    return sqlcUserToDomain(&user), nil
+}
+```
+
+**Important**: Do the same for `OrderRepository` and any other repositories that may participate in transactions.
+
+##### Step 4: Use Unit of Work in Use Cases
+
+Now you can use the Unit of Work in your use case layer:
+
+```go
+// internal/usecase/order_interactor.go
+package usecase
+
+import (
+    "context"
+    "go-clean-arch/internal/domain"
+    "go-clean-arch/internal/usecase/port"
+    "github.com/samber/oops"
+)
+
+type OrderInteractor struct {
+    uow port.UnitOfWork
+    // Note: Individual repositories are NOT injected when using UOW
+    // They are obtained through UOW.DoWithRepositories
+}
+
+func NewOrderInteractor(uow port.UnitOfWork) port.OrderUseCase {
+    return &OrderInteractor{
+        uow: uow,
+    }
+}
+
+// CreateOrderWithRewards creates an order and updates user reward points
+// This requires both OrderRepository and UserRepository in a single transaction
+func (i *OrderInteractor) CreateOrderWithRewards(ctx context.Context, req CreateOrderRequest) (*domain.Order, error) {
+    var resultOrder *domain.Order
+
+    // Execute multiple repository operations in a single transaction
+    err := i.uow.DoWithRepositories(ctx, func(ctx context.Context, repos port.Repositories) error {
+        // 1. Verify user exists
+        user, err := repos.UserRepo.FindByID(ctx, req.UserID)
+        if err != nil {
+            return oops.
+                Code(domain.ErrCodeUserNotFound).
+                With("user_id", req.UserID).
+                Wrapf(err, "user not found")
+        }
+
+        // 2. Create the order
+        order := domain.NewOrder(req.UserID, req.Items)
+        if err := repos.OrderRepo.Save(ctx, order); err != nil {
+            return oops.
+                Code(domain.ErrCodeDatabaseInsertFailed).
+                Wrapf(err, "failed to create order")
+        }
+
+        // 3. Update user reward points
+        rewardPoints := order.CalculateRewardPoints()
+        user.AddRewardPoints(rewardPoints)
+        if err := repos.UserRepo.Update(ctx, user); err != nil {
+            return oops.
+                Code(domain.ErrCodeDatabaseUpdateFailed).
+                Wrapf(err, "failed to update user rewards")
+        }
+
+        // 4. Store result for return value
+        resultOrder = order
+        
+        // If any step fails, the entire transaction will be rolled back
+        return nil
+    })
+
+    if err != nil {
+        return nil, err
+    }
+
+    return resultOrder, nil
+}
+
+// Example: Transfer operation across same repository but multiple rows
+func (i *OrderInteractor) TransferRewardPoints(ctx context.Context, fromUserID, toUserID int64, points int) error {
+    return i.uow.DoWithRepositories(ctx, func(ctx context.Context, repos port.Repositories) error {
+        // 1. Deduct points from source user
+        fromUser, err := repos.UserRepo.FindByID(ctx, fromUserID)
+        if err != nil {
+            return err
+        }
+        
+        if err := fromUser.DeductRewardPoints(points); err != nil {
+            return oops.
+                Code(domain.ErrCodeInsufficientPoints).
+                Wrapf(err, "insufficient reward points")
+        }
+        
+        if err := repos.UserRepo.Update(ctx, fromUser); err != nil {
+            return err
+        }
+
+        // 2. Add points to destination user
+        toUser, err := repos.UserRepo.FindByID(ctx, toUserID)
+        if err != nil {
+            return err
+        }
+        
+        toUser.AddRewardPoints(points)
+        if err := repos.UserRepo.Update(ctx, toUser); err != nil {
+            return err
+        }
+
+        return nil
+    })
+}
+```
+
+##### Step 5: Wire Dependencies
+
+Update your dependency injection to include the Unit of Work:
+
+```go
+// internal/app/wire.go
+//go:build wireinject
+// +build wireinject
+
+package app
+
+import (
+    "go-clean-arch/internal/adapter/repository"
+    "go-clean-arch/internal/usecase"
+    "go-clean-arch/pkg/config"
+    
+    "github.com/google/wire"
+    "github.com/jmoiron/sqlx"
+)
+
+// ProvideUnitOfWork provides the Unit of Work implementation
+func ProvideUnitOfWork(db *sqlx.DB) port.UnitOfWork {
+    return repository.NewUnitOfWork(db)
+}
+
+// InitializeOrderInteractor wires up the order interactor with UOW
+func InitializeOrderInteractor(db *sqlx.DB, cfg *config.Config) (port.OrderUseCase, error) {
+    wire.Build(
+        repository.NewUnitOfWork,    // Provide UOW
+        usecase.NewOrderInteractor,  // Inject UOW into interactor
+    )
+    return nil, nil
+}
+```
+
+##### Best Practices
+
+**DO**:
+- ✅ Define UOW interface in use case layer (`internal/usecase/port/`)
+- ✅ Implement UOW in adapter layer (`internal/adapter/repository/`)
+- ✅ Use `DoWithRepositories` for operations requiring multiple repositories
+- ✅ Let repositories be lightweight - they shouldn't know about transactions
+- ✅ Handle errors properly - rollback is automatic on error
+- ✅ Keep transaction scope as small as possible
+- ✅ Use context to pass transaction between repositories
+
+**DON'T**:
+- ❌ Don't use global transaction variables
+- ❌ Don't manage transactions directly in use case layer
+- ❌ Don't pass `*sqlx.Tx` directly to use cases
+- ❌ Don't nest transactions (check if tx exists before starting a new one)
+- ❌ Don't perform long-running operations inside transactions
+- ❌ Don't call external APIs inside transactions (network latency)
+
+##### Testing Unit of Work
+
+Mock the Unit of Work interface for testing:
+
+```go
+// internal/usecase/mocks/unit_of_work_mock.go
+package mocks
+
+import (
+    "context"
+    "go-clean-arch/internal/usecase/port"
+)
+
+type MockUnitOfWork struct {
+    DoFunc               func(ctx context.Context, fn func(ctx context.Context) error) error
+    DoWithRepositoriesFunc func(ctx context.Context, fn func(ctx context.Context, repos port.Repositories) error) error
+}
+
+func (m *MockUnitOfWork) Do(ctx context.Context, fn func(ctx context.Context) error) error {
+    if m.DoFunc != nil {
+        return m.DoFunc(ctx, fn)
+    }
+    return fn(ctx)
+}
+
+func (m *MockUnitOfWork) DoWithRepositories(ctx context.Context, fn func(ctx context.Context, repos port.Repositories) error) error {
+    if m.DoWithRepositoriesFunc != nil {
+        return m.DoWithRepositoriesFunc(ctx, fn)
+    }
+    // Default: call function with mock repositories
+    repos := port.Repositories{
+        UserRepo:  &MockUserRepository{},
+        OrderRepo: &MockOrderRepository{},
+    }
+    return fn(ctx, repos)
+}
+```
+
+**Example test**:
+
+```go
+// internal/usecase/order_interactor_test.go
+func TestOrderInteractor_CreateOrderWithRewards(t *testing.T) {
+    mockUser := &domain.User{ID: 1, Email: "test@example.com"}
+    
+    mockUOW := &mocks.MockUnitOfWork{
+        DoWithRepositoriesFunc: func(ctx context.Context, fn func(ctx context.Context, repos port.Repositories) error) error {
+            repos := port.Repositories{
+                UserRepo: &mocks.MockUserRepository{
+                    FindByIDFunc: func(ctx context.Context, id int64) (*domain.User, error) {
+                        return mockUser, nil
+                    },
+                    UpdateFunc: func(ctx context.Context, user *domain.User) error {
+                        return nil
+                    },
+                },
+                OrderRepo: &mocks.MockOrderRepository{
+                    SaveFunc: func(ctx context.Context, order *domain.Order) error {
+                        order.ID = 123
+                        return nil
+                    },
+                },
+            }
+            return fn(ctx, repos)
+        },
+    }
+    
+    interactor := usecase.NewOrderInteractor(mockUOW)
+    
+    order, err := interactor.CreateOrderWithRewards(context.Background(), CreateOrderRequest{
+        UserID: 1,
+        Items:  []OrderItem{{ProductID: 1, Quantity: 2}},
+    })
+    
+    assert.NoError(t, err)
+    assert.NotNil(t, order)
+    assert.Equal(t, int64(123), order.ID)
+}
+```
+
+##### Comparison: Single Repository vs Unit of Work
+
+| Aspect | Single Repository Transaction | Unit of Work |
+|--------|------------------------------|--------------|
+| **Scope** | Within one repository | Across multiple repositories |
+| **Transaction Management** | In repository method | In use case through UOW |
+| **Use Case** | Simple CRUD with related data | Complex operations across aggregates |
+| **Example** | Create order with items | Create order + update user points |
+| **Complexity** | Lower | Higher |
+| **When to Use** | Related data in same aggregate | Operations spanning multiple aggregates |
+
+**Example of when NOT to use UOW** (single repository is enough):
+
+```go
+// ✅ Good: Use single repository transaction for related data in same aggregate
+func (r *OrderRepository) CreateOrderWithItems(ctx context.Context, order *domain.Order) error {
+    tx, err := r.db.BeginTxx(ctx, nil)
+    // ... create order and order_items in single transaction
+    // This is WITHIN the repository, not using UOW
+}
+```
+
+**Example of when TO use UOW** (multiple repositories needed):
+
+```go
+// ✅ Good: Use UOW for operations across different aggregates
+func (i *OrderInteractor) CreateOrderWithRewards(ctx context.Context, req CreateOrderRequest) error {
+    return i.uow.DoWithRepositories(ctx, func(ctx context.Context, repos port.Repositories) error {
+        // Create order (OrderRepository)
+        // Update user points (UserRepository)
+        // Both in same transaction
+    })
+}
+```
+
 #### Query Building with Squirrel
 
 **Important**: Configure the correct placeholder format for your database:
