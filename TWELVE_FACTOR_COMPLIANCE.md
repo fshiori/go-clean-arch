@@ -323,5 +323,5 @@ See `deployments/docker-compose.yaml` for a complete example of environment-base
 
 ---
 
-**Last Updated**: 2025-11-20
+**Last Updated**: 2025-01-23
 **Compliance Level**: 100% (12/12 factors)

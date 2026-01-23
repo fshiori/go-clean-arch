@@ -99,7 +99,7 @@ make atlas-install
    - Non-blocking issue, does not affect production code
 
 ### Tech Stack
-- **Go**: 1.24+
+- **Go**: 1.22+ (tested with Go 1.23.x)
 - **HTTP Framework**: Gin
 - **Database Access**:
   - **sqlc** (primary - type-safe SQL queries for static queries)
@@ -122,7 +122,7 @@ make atlas-install
 ```
 ┌─────────────────────────────────────────┐
 │  Delivery (internal/delivery/)          │  ← HTTP, Worker, Cron, Microservice
-│  - Converts DTOs ↔ Domain entities      │
+│  - Converts DTOs ↔ Domain entities      │     Depends on: Use Case
 │  - Request validation, error mapping    │
 │  Examples:                              │
 │    internal/delivery/http/handler/      │
@@ -131,33 +131,40 @@ make atlas-install
 │    internal/delivery/micro/handler/     │
 └──────────────┬──────────────────────────┘
                │
-┌──────────────▼──────────────────────────┐
+               ▼
+┌─────────────────────────────────────────┐
 │  Use Cases (internal/usecase/)          │  ← Application business logic
-│  - Orchestrates domain logic            │
-│  - Defines ports (interfaces)           │
+│  - Orchestrates domain logic            │     Depends on: Domain
+│  - Defines ports (interfaces)           │     Defines: Repository/Gateway interfaces
 │  Examples:                              │
 │    internal/usecase/user_interactor.go  │
 │    internal/usecase/port/               │
 └──────────────┬──────────────────────────┘
                │
-┌──────────────▼──────────────────────────┐
-│  Adapters (internal/adapter/)           │  ← Repository & Gateway implementations
-│  - Converts Domain ↔ DB models          │
-│  - External API integrations            │
-│  Examples:                              │
-│    internal/adapter/repository/         │
-│    internal/adapter/gateway/            │
-└──────────────┬──────────────────────────┘
-               │
-┌──────────────▼──────────────────────────┐
+               ▼
+┌─────────────────────────────────────────┐
 │  Domain (internal/domain/)              │  ← Pure business entities & rules
-│  - NO external dependencies             │
+│  - NO external dependencies             │     Depends on: Nothing (innermost)
 │  - Rich domain models, not anemic       │
 │  Examples:                              │
 │    internal/domain/user.go              │
 │    internal/domain/order.go             │
 └─────────────────────────────────────────┘
+
+               ▲
+               │ implements port interfaces
+┌─────────────────────────────────────────┐
+│  Adapters (internal/adapter/)           │  ← Repository & Gateway implementations
+│  - Implements Use Case port interfaces  │     Implements: port.UserRepository, etc.
+│  - Converts Domain ↔ DB models          │     Depends on: Domain (for conversion)
+│  - External API integrations            │
+│  Examples:                              │
+│    internal/adapter/repository/         │
+│    internal/adapter/gateway/            │
+└─────────────────────────────────────────┘
 ```
+
+**Note**: Adapters implement the interfaces (ports) defined in `usecase/port/`. They are injected via Wire DI, allowing the Use Case layer to remain independent of specific implementations.
 
 ### Key Architectural Decisions
 
@@ -340,8 +347,8 @@ v1 := router.Group("/api/v1")
 var RepositorySet = wire.NewSet(
     repository.NewUserRepository,
     repository.NewProductRepository,  // ← Add this
-    wire.Bind(new(port.UserRepository), new(*repository.UserRepositorySQLX)),
-    wire.Bind(new(port.ProductRepository), new(*repository.ProductRepositorySQLX)),  // ← Add this
+    wire.Bind(new(port.UserRepository), new(*repository.userRepositorySQLC)),
+    wire.Bind(new(port.ProductRepository), new(*repository.productRepositorySQLC)),  // ← Add this
 )
 
 // Add to UseCaseSet:

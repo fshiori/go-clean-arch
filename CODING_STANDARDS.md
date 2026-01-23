@@ -1,7 +1,7 @@
 # Go Clean Architecture Coding Standards
 
-**Version**: 1.2
-**Last Updated**: 2025-11-26
+**Version**: 1.3
+**Last Updated**: 2025-01-23
 
 > **For AI assistants**: See [CLAUDE.md](CLAUDE.md) for a quick reference guide.
 >
@@ -983,7 +983,7 @@ func NewPaginationParams(page, pageSize int) PaginationParams {
 }
 
 // Can be used across all repositories
-func (r *UserRepositorySQLX) List(ctx context.Context, params PaginationParams) ([]*domain.User, int64, error) {
+func (r *userRepositorySQLC) List(ctx context.Context, params PaginationParams) ([]*domain.User, int64, error) {
     // Count total
     var total int64
     countQuery, countArgs, _ := psql.Select("COUNT(*)").From("users").ToSql()
@@ -1106,7 +1106,7 @@ var (
 
 ### Error Wrapping and Context
 
-#### Option 1: Standard Library (Recommended for Simple Projects)
+#### Option 1: Standard Library (For Simple Projects)
 
 Use Go's built-in error wrapping with `fmt.Errorf` and `%w`:
 
@@ -1119,7 +1119,7 @@ import (
 )
 
 // ✅ Good: Standard library error wrapping
-func (r *UserRepositorySQLX) FindByID(ctx context.Context, id int64) (*domain.User, error) {
+func (r *userRepositorySQLC) FindByID(ctx context.Context, id int64) (*domain.User, error) {
     query, args, err := psql.Select("*").
         From("users").
         Where(squirrel.Eq{"id": id}).
@@ -1142,15 +1142,15 @@ func (r *UserRepositorySQLX) FindByID(ctx context.Context, id int64) (*domain.Us
 }
 ```
 
-#### Option 2: Rich Error Context with oops (Optional)
+#### Option 2: Rich Error Context with oops (Recommended)
 
-For complex projects requiring structured error context, you can use the [oops](https://github.com/samber/oops) library:
+For production projects requiring structured error context, use the [oops](https://github.com/samber/oops) library:
 
 ```go
 import "github.com/samber/oops"
 
 // ✅ Good: Rich error context with oops
-func (r *UserRepositorySQLX) FindByID(ctx context.Context, id int64) (*domain.User, error) {
+func (r *userRepositorySQLC) FindByID(ctx context.Context, id int64) (*domain.User, error) {
     query, args, err := psql.Select("*").
         From("users").
         Where(squirrel.Eq{"id": id}).
@@ -1187,15 +1187,17 @@ func (r *UserRepositorySQLX) FindByID(ctx context.Context, id int64) (*domain.Us
 }
 ```
 
-**When to use oops:**
-- ✅ Complex microservices with distributed tracing
-- ✅ Need structured logging with error context
-- ✅ Multiple teams require consistent error codes
+**Why oops is recommended:**
+- ✅ Structured error codes for consistent API responses
+- ✅ Rich context (user_id, operation, hints) for debugging
+- ✅ Seamless integration with structured logging (slog)
+- ✅ Stack traces and error chaining out of the box
+- ✅ Better error mapping in middleware
 
-**When to use standard library:**
-- ✅ Simple projects or getting started
-- ✅ Want to minimize dependencies
-- ✅ Basic error wrapping is sufficient
+**When standard library is sufficient:**
+- ✅ Very simple projects or prototypes
+- ✅ Strict dependency minimization requirements
+- ✅ Learning Go basics before adding libraries
 
 ### Error Mapping in Middleware
 
@@ -1369,7 +1371,7 @@ import (
 // Provider Sets
 var RepositorySet = wire.NewSet(
     repository.NewUserRepository,
-    wire.Bind(new(port.UserRepository), new(*repository.UserRepositorySQLX)),
+    wire.Bind(new(port.UserRepository), new(*repository.userRepositorySQLC)),
 )
 
 var UseCaseSet = wire.NewSet(
@@ -3011,9 +3013,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.23'
 
       - name: Install generation tools
         run: |

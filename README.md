@@ -55,25 +55,33 @@ This project follows Clean Architecture and Standard Go Project Layout principle
 
 ```
 ┌─────────────────────────────────────────┐
-│          Delivery Layer                 │
-│   (HTTP, Workers, Cron, Microservice)   │
+│          Delivery Layer                 │  ← HTTP, Workers, Cron, Microservice
+│      (Receives external requests)       │     Depends on: Use Case
 └──────────────┬──────────────────────────┘
                │
-┌──────────────▼──────────────────────────┐
-│       Interface/Adapter Layer           │
-│   (Repositories, Gateways)              │
+               ▼
+┌─────────────────────────────────────────┐
+│          Use Case Layer                 │  ← Application business logic
+│   (Orchestrates domain logic)           │     Depends on: Domain
+│   (Defines port interfaces)             │     Defines: Repository/Gateway interfaces
 └──────────────┬──────────────────────────┘
                │
-┌──────────────▼──────────────────────────┐
-│          Use Case Layer                 │
-│    (Application Business Logic)         │
-└──────────────┬──────────────────────────┘
-               │
-┌──────────────▼──────────────────────────┐
-│          Domain Layer                   │
-│    (Entities, Business Rules)           │
+               ▼
+┌─────────────────────────────────────────┐
+│          Domain Layer                   │  ← Pure business entities & rules
+│    (Entities, Business Rules)           │     Depends on: Nothing (innermost)
+└─────────────────────────────────────────┘
+
+               ▲
+               │ implements
+┌─────────────────────────────────────────┐
+│          Adapter Layer                  │  ← Repository & Gateway implementations
+│   (Repositories, Gateways)              │     Implements: Use Case port interfaces
+│   (Connects to external systems)        │     Depends on: Domain (for entity conversion)
 └─────────────────────────────────────────┘
 ```
+
+**Note**: Adapters implement the interfaces (ports) defined by Use Cases. They are injected at runtime via dependency injection, which is why they appear separately from the main dependency flow.
 
 ### Key Principles
 
@@ -89,7 +97,7 @@ For detailed architecture documentation, see [CODING_STANDARDS.md](CODING_STANDA
 
 ### Prerequisites
 
-- Go 1.24 or higher
+- Go 1.22 or higher (tested with Go 1.23.x)
 - Database: PostgreSQL, MySQL, or SQLite
 - RabbitMQ (for worker mode, optional)
 
@@ -373,7 +381,7 @@ For detailed design decisions, see [CODING_STANDARDS.md](CODING_STANDARDS.md).
 
 ## Technology Stack
 
-- **Language**: Go 1.24+
+- **Language**: Go 1.22+
 - **HTTP Framework**: Gin
 - **Database Access**:
   - **sqlc** (primary - type-safe SQL queries for static queries)
