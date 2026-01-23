@@ -6,6 +6,8 @@ For human developers, see:
 - User documentation: [README.md](README.md)
 - Coding standards: [CODING_STANDARDS.md](CODING_STANDARDS.md)
 
+> **Sync Reminder**: This repo contains [docs/GO_CLEAN_ARCHITECTURE_REFERENCE.md](docs/GO_CLEAN_ARCHITECTURE_REFERENCE.md), a standalone architecture guide for AI assistants. When modifying architectural patterns, coding standards, or best practices in this repo, **also update that reference file** to keep them in sync.
+
 ---
 
 ## Quick Commands

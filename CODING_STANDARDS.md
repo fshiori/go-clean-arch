@@ -9,6 +9,8 @@
 >
 > This document contains comprehensive coding standards for human contributors.
 
+> **Sync Reminder**: When modifying this document, also update [docs/GO_CLEAN_ARCHITECTURE_REFERENCE.md](docs/GO_CLEAN_ARCHITECTURE_REFERENCE.md) - a standalone architecture guide extracted from this repo for use in other projects.
+
 ## Table of Contents
 
 1. [Introduction](#introduction)
